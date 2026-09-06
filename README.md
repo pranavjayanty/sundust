@@ -99,21 +99,25 @@ there is no deep link — the card falls back to revealing the folder. Adding on
 a single entry in `src/harnesses.js`: a binary name, an argument builder, a result
 parser, and optionally a URL scheme.
 
-## Harness limits
+## Plan usage
 
-The dashboard carries a searchable table of context windows, output caps, plan
-tiers and rate-limit shapes across all four harnesses. It is also searchable from
-`⌘K` — type "weekly", "context", "free tier".
+The strip at the top is your fuel gauge: the plan constraints that actually bind,
+with a sparkline of the last twelve days and the peak you hit.
 
-Every row is labelled by confidence, because this matters: vendors publish context
-and output windows, but mostly **do not** publish the token counts behind
-subscription rate limits.
+These are the same numbers `/usage` shows. The desktop app polls its usage
+endpoint every ~15 minutes and appends a sample to
+`~/Library/Application Support/Claude/plan-usage-history.json`; Sundust only
+reads that file. Nothing here calls an API or touches a credential.
 
-- `official` — published by the vendor
-- `estimate` — community-reported, treat as a sense of scale
-- `unverified` — sources disagree; check before relying on it
+Constraints are rendered from whatever keys the app reports (`fh` = 5-hour,
+`sd` = weekly across all models), so a limit that appears later shows up without
+a code change. "Reset N ago" is the last time the number was actually observed
+to fall — an observation, not a predicted schedule, because the local history is
+too sparse to infer a reset cadence reliably.
 
-`src/limits.js` carries an `asOf` date. Sundust's own agenda re-checks it weekly.
+Token counts and prices are deliberately absent. Cumulative tokens are dominated
+by cache reads and tell you nothing about whether you can keep working; the plan
+percentages do.
 
 ## Two schedulers
 
@@ -166,7 +170,7 @@ sundust run <match> [task] run an agenda task now, headless
 ```
 src/config.js      paths, settings
 src/harnesses.js   harness definitions       ← add a harness here
-src/limits.js      harness limits reference  ← keep this current
+src/usage.js       plan usage, read from the desktop app's own record
 src/stages.js      stellar stage mapping
 src/scan.js        incremental transcript indexer + live-process detection
 src/projects.js    registry, scaffolding, relocation, auto-discovery

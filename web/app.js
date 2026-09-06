@@ -1,8 +1,13 @@
 const $ = (s, r = document) => r.querySelector(s);
 const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
+const svgEl = (t, attrs = {}) => {
+  const n = document.createElementNS('http://www.w3.org/2000/svg', t);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  return n;
+};
 
 let STATE = null, selected = null;
-const STAGE = {};   // filled from the server so colours live in one place
+const STAGE = {};
 
 const api = async (p, opt) => {
   const r = await fetch(p, { headers: { 'content-type': 'application/json' }, ...opt });
@@ -18,7 +23,6 @@ function toast(msg, bad) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), bad ? 6500 : 3200);
 }
-
 const openLink = (url) => {
   if (!url) return toast('this harness has no deep link — use Reveal', true);
   post('/api/open', { url }).catch(() => { location.href = url; });
@@ -33,14 +37,84 @@ function ago(ts) {
   if (s < 86400 * 30) return `${Math.round(s / 86400)}d`;
   return `${Math.round(s / (86400 * 30))}mo`;
 }
-const num = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n || 0);
-const money = (n) => n ? `$${n < 1 ? n.toFixed(2) : n.toFixed(n < 100 ? 2 : 0)}` : '$0';
+function until(ts) {
+  if (!ts) return 'paused';
+  const s = (ts - Date.now()) / 1000;
+  if (s < 0) return 'due';
+  if (s < 3600) return `in ${Math.round(s / 60)}m`;
+  if (s < 86400) return `in ${Math.round(s / 3600)}h`;
+  return `in ${Math.round(s / 86400)}d`;
+}
+const money = (n) => `$${n < 1 ? n.toFixed(2) : n.toFixed(n < 100 ? 2 : 0)}`;
 const stageColour = (id) => STAGE[id]?.colour || '#9a7768';
+// usage runs hotter as it fills — the same temperature idea as the stars
+const heat = (pct) => pct >= 85 ? '#ff5136' : pct >= 60 ? '#ff9351' : pct >= 30 ? '#ffb627' : '#ffd24a';
+
+/* ===================================================================== fuel
+   Plan constraints, read from the desktop app's own usage record. These are
+   the numbers /usage shows — the only resource figure that actually binds. */
+function renderFuel() {
+  const host = $('#fuel'); host.innerHTML = '';
+  const u = STATE.usage;
+  if (!u?.available) {
+    const g = el('div', 'gauge');
+    g.append(el('div', 'gauge-name', 'Plan usage unavailable'));
+    g.append(el('div', 'gauge-foot', el('span', null, u?.reason || 'no local usage history')));
+    host.append(g);
+    return;
+  }
+
+  for (const c of u.constraints) {
+    const g = el('div', 'gauge');
+    g.title = c.hint;
+
+    const top = el('div', 'gauge-top');
+    top.append(el('span', 'gauge-name', c.label));
+    const pct = el('span', 'gauge-pct', `${c.percent}%`);
+    pct.style.color = c.percent >= 30 ? heat(c.percent) : 'var(--white)';
+    top.append(pct);
+    g.append(top);
+
+    const track = el('div', 'track');
+    const fill = el('div', 'fill');
+    fill.style.width = `${Math.max(c.percent, c.percent > 0 ? 1.5 : 0)}%`;
+    fill.style.background = heat(c.percent);
+    track.append(fill); g.append(track);
+
+    if (c.spark?.length > 1) g.append(sparkline(c.spark, heat(c.peak)));
+
+    const foot = el('div', 'gauge-foot');
+    foot.append(el('span', null, `peak ${c.peak}%`));
+    foot.append(el('span', null, c.lastReset ? `reset ${ago(c.lastReset)} ago` : 'no reset seen'));
+    g.append(foot);
+    host.append(g);
+  }
+
+  const note = el('div', 'fuel-note');
+  note.textContent = u.stale
+    ? `usage last sampled ${ago(u.sampledAt)} ago — open Claude Code to refresh`
+    : `sampled ${ago(u.sampledAt)} ago · ${u.sampleCount} readings over ${ago(u.windowStart)}`;
+  host.append(note);
+}
+
+function sparkline(values, colour) {
+  const w = 100, h = 16, max = Math.max(1, ...values);
+  const pts = values.map((v, i) => [
+    (i / Math.max(1, values.length - 1)) * w,
+    h - (v / max) * (h - 2) - 1
+  ]);
+  const svg = svgEl('svg', { class: 'spark', viewBox: `0 0 ${w} ${h}`, preserveAspectRatio: 'none' });
+  svg.append(svgEl('polyline', {
+    points: pts.map((p) => p.join(',')).join(' '),
+    fill: 'none', stroke: colour, 'stroke-width': 1.2,
+    'vector-effect': 'non-scaling-stroke', 'stroke-linejoin': 'round'
+  }));
+  return svg;
+}
 
 /* ==================================================================== field
-   Projects laid out like an HR diagram: horizontal is colour temperature
-   (how recently it burned), vertical is luminosity (how much work is in it).
-   Each project is drawn as the star it currently is.                        */
+   Horizontal is recency, vertical is how much work lives in the project.
+   Each stage draws differently, so shape carries state alongside colour.   */
 const canvas = $('#field');
 const ctx = canvas.getContext('2d');
 let stars = [], hover = null;
@@ -48,7 +122,7 @@ let stars = [], hover = null;
 function resize() {
   const r = canvas.getBoundingClientRect();
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  canvas.width = Math.max(1, r.width * dpr); canvas.height = Math.max(1, r.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 addEventListener('resize', () => { resize(); layout(); });
@@ -59,25 +133,23 @@ const coolness = (ts) => Math.min(1, Math.log10(1 + Math.max(0, Date.now() - (ts
 function layout() {
   const r = canvas.getBoundingClientRect();
   const ps = STATE?.projects || [];
-  const padX = 72, padTop = 52, padBot = 78;
-  const w = Math.max(60, r.width - padX * 2);
-  const h = Math.max(50, r.height - padTop - padBot);
-  const maxLum = Math.max(1, ...ps.map((p) => (p.tokens || 0) + p.sessionCount * 2e6));
+  const narrow = r.width < 520;
+  const padX = narrow ? 46 : 74, padTop = 44, padBot = 42;
+  const w = Math.max(50, r.width - padX * 2);
+  const h = Math.max(46, r.height - padTop - padBot);
+  const maxAct = Math.max(1, ...ps.map((p) => p.activity || 0));
 
   stars = ps.map((p) => {
-    const cool = coolness(p.lastActivity);
-    const lum = ((p.tokens || 0) + p.sessionCount * 2e6) / maxLum;
-    const jitter = (hash(p.id) - 0.5) * 26;
+    const lum = Math.sqrt((p.activity || 0) / maxAct);
     return {
-      p, cool,
-      radius: 5 + Math.sqrt(lum) * 13,
-      x: padX + cool * w,
-      y: padTop + (1 - Math.sqrt(lum)) * h + jitter,
+      p,
+      radius: (narrow ? 4 : 5) + lum * (narrow ? 8 : 12),
+      x: padX + coolness(p.lastActivity) * w,
+      y: padTop + (1 - lum) * h + (hash(p.id) - 0.5) * 20,
       phase: hash(p.id + 'p') * Math.PI * 2
     };
   });
 
-  // nudge apart so labels stay legible when several projects cluster
   for (let pass = 0; pass < 24; pass++) {
     let moved = false;
     for (let i = 0; i < stars.length; i++) {
@@ -85,11 +157,10 @@ function layout() {
         const a = stars[i], b = stars[j];
         const dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.hypot(dx, dy) || 0.01;
-        const min = a.radius + b.radius + 46;
+        const min = a.radius + b.radius + (narrow ? 34 : 48);
         if (d < min) {
           const push = (min - d) / 2, ux = dx / d, uy = dy / d;
-          a.x -= ux * push; a.y -= uy * push;
-          b.x += ux * push; b.y += uy * push;
+          a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push;
           moved = true;
         }
       }
@@ -97,174 +168,164 @@ function layout() {
     if (!moved) break;
   }
   for (const s of stars) {
-    s.x = Math.max(padX * 0.5, Math.min(r.width - padX * 0.5, s.x));
+    s.x = Math.max(24, Math.min(r.width - 24, s.x));
     s.y = Math.max(padTop * 0.7, Math.min(r.height - padBot, s.y));
   }
 }
 
 function corona(x, y, rad, colour, alpha) {
-  const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(0.1, rad));
   g.addColorStop(0, colour + Math.round(alpha * 255).toString(16).padStart(2, '0'));
   g.addColorStop(1, colour + '00');
   ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, Math.max(0.1, rad), 0, Math.PI * 2); ctx.fill();
 }
 
-/** Each stage gets its own rendering — the shape carries the state. */
 function drawStar(s, t) {
   const { x, y, radius: R, p } = s;
   const c = stageColour(p.stage);
   const beat = Math.sin(t / 700 + s.phase);
 
   switch (p.stage) {
-    case 'flare': {
-      corona(x, y, R * (4.6 + beat * 0.6), c, 0.34);
+    case 'flare':
+      corona(x, y, R * (4.4 + beat * 0.5), c, 0.32);
       ctx.fillStyle = c;
       ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
-      // prominences: loops anchored on the limb, evenly spaced around the star
       ctx.lineCap = 'round';
       for (let i = 0; i < 4; i++) {
-        const a = t / 1800 + s.phase + (i * Math.PI * 2) / 4;
-        const reach = R * (1.42 + 0.3 * Math.sin(t / 520 + i * 1.7));
-        ctx.beginPath();
-        ctx.arc(x, y, reach, a - 0.5, a + 0.5);
+        const a = t / 1800 + s.phase + (i * Math.PI) / 2;
+        const reach = R * (1.42 + 0.28 * Math.sin(t / 520 + i * 1.7));
+        ctx.beginPath(); ctx.arc(x, y, reach, a - 0.5, a + 0.5);
         ctx.strokeStyle = c;
-        ctx.globalAlpha = 0.32 + 0.3 * (0.5 + 0.5 * Math.sin(t / 520 + i * 1.7));
-        ctx.lineWidth = 1.8;
-        ctx.stroke();
+        ctx.globalAlpha = 0.3 + 0.3 * (0.5 + 0.5 * Math.sin(t / 520 + i * 1.7));
+        ctx.lineWidth = 1.8; ctx.stroke();
       }
       ctx.globalAlpha = 1;
       ctx.fillStyle = '#fff8e4';
-      ctx.beginPath(); ctx.arc(x - R * 0.22, y - R * 0.22, R * 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x - R * 0.22, y - R * 0.22, R * 0.38, 0, Math.PI * 2); ctx.fill();
       break;
-    }
     case 'supernova': {
-      const ring = (t / 26 + s.phase * 90) % 100 / 100;
-      corona(x, y, R * 3.4, c, 0.28);
+      const ring = ((t / 26 + s.phase * 90) % 100) / 100;
+      corona(x, y, R * 3.2, c, 0.26);
       ctx.strokeStyle = c; ctx.globalAlpha = 1 - ring; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, y, R + ring * R * 4, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = c;
+      ctx.globalAlpha = 1; ctx.fillStyle = c;
       ctx.beginPath(); ctx.arc(x, y, R * 0.82, 0, Math.PI * 2); ctx.fill();
       break;
     }
-    case 'main-sequence': {
-      corona(x, y, R * (2.9 + beat * 0.22), c, 0.3);
+    case 'main-sequence':
+      corona(x, y, R * (2.8 + beat * 0.2), c, 0.28);
       ctx.fillStyle = c;
       ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,248,228,.55)';
-      ctx.beginPath(); ctx.arc(x - R * 0.24, y - R * 0.24, R * 0.36, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,248,228,.5)';
+      ctx.beginPath(); ctx.arc(x - R * 0.24, y - R * 0.24, R * 0.34, 0, Math.PI * 2); ctx.fill();
       break;
-    }
-    case 'protostar': {
-      // still collapsing: diffuse, no hard edge
-      corona(x, y, R * 3.6, c, 0.26);
+    case 'protostar':
+      corona(x, y, R * 3.4, c, 0.24);
       ctx.setLineDash([3, 4]);
       ctx.strokeStyle = c; ctx.globalAlpha = .6; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(x, y, R * 1.25, 0, Math.PI * 2); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha = 1;
-      ctx.fillStyle = c; ctx.globalAlpha = .8;
-      ctx.beginPath(); ctx.arc(x, y, Math.max(3, R * 0.68), 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, R * 1.28, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = .8;
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(x, y, Math.max(3, R * 0.66), 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
       break;
-    }
-    case 'red-giant': {
-      // swollen and cooling: big soft envelope, dim core
-      corona(x, y, R * 3.2, c, 0.2);
-      ctx.fillStyle = c; ctx.globalAlpha = .32;
+    case 'red-giant':
+      corona(x, y, R * 3, c, 0.19);
+      ctx.fillStyle = c; ctx.globalAlpha = .3;
       ctx.beginPath(); ctx.arc(x, y, R * 1.5, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = .85;
-      ctx.beginPath(); ctx.arc(x, y, R * 0.72, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, R * 0.7, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
       break;
-    }
-    default: { // white dwarf — a dim remnant
-      corona(x, y, R * 1.9, c, 0.16);
+    default:
+      corona(x, y, R * 1.8, c, 0.15);
       ctx.strokeStyle = c; ctx.globalAlpha = .5; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(x, y, R * 0.62, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = c;
-      ctx.beginPath(); ctx.arc(x, y, Math.max(1.6, R * 0.3), 0, Math.PI * 2); ctx.fill();
-    }
+      ctx.beginPath(); ctx.arc(x, y, R * 0.6, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(x, y, Math.max(1.6, R * 0.28), 0, Math.PI * 2); ctx.fill();
   }
 
   const focus = s === hover || p === selected;
-  const label = p.name.length > 24 ? `${p.name.slice(0, 23)}…` : p.name;
+  const label = p.name.length > 20 ? `${p.name.slice(0, 19)}…` : p.name;
   ctx.font = `${focus ? '600 ' : ''}10.5px -apple-system,system-ui,sans-serif`;
   ctx.textAlign = 'center';
   ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(12,9,8,.95)';
-  const ly = y + R + 17;
-  ctx.strokeText(label, x, ly);
-  ctx.fillStyle = focus ? '#f8f1e9' : `${c}c0`;
-  ctx.fillText(label, x, ly);
+  ctx.strokeText(label, x, y + R + 16);
+  ctx.fillStyle = focus ? '#f8f1e9' : `${c}bb`;
+  ctx.fillText(label, x, y + R + 16);
 }
 
 function draw(t = 0) {
   const r = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, r.width, r.height);
-
-  // faint dust so an empty field still reads as sky
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 34; i++) {
     const dx = ((i * 97.13) % 1) * r.width, dy = ((i * 51.7) % 1) * r.height;
-    ctx.fillStyle = `rgba(248,241,233,${0.02 + ((i * 13) % 5) * 0.008})`;
+    ctx.fillStyle = `rgba(248,241,233,${0.02 + ((i * 13) % 5) * 0.007})`;
     ctx.beginPath(); ctx.arc(dx, dy, 0.7, 0, Math.PI * 2); ctx.fill();
   }
   for (const s of stars) drawStar(s, t);
   requestAnimationFrame(draw);
 }
 
-canvas.addEventListener('mousemove', (e) => {
+function pointAt(clientX, clientY) {
   const r = canvas.getBoundingClientRect();
-  const x = e.clientX - r.left, y = e.clientY - r.top;
-  hover = stars.find((s) => Math.hypot(s.x - x, s.y - y) < s.radius + 12) || null;
+  const x = clientX - r.left, y = clientY - r.top;
+  return { r, x, y, hit: stars.find((s) => Math.hypot(s.x - x, s.y - y) < s.radius + 14) || null };
+}
+function showTip(p, x, y, r) {
   const tip = $('#tip');
-  if (!hover) { tip.hidden = true; return; }
-  const p = hover.p;
   tip.innerHTML = '';
   const st = el('div', 'stg', p.stageLabel);
   st.style.color = stageColour(p.stage);
   tip.append(st, el('b', null, p.name));
   tip.append(el('small', null, STAGE[p.stage]?.detail || ''));
-  tip.append(el('small', null, `${p.sessionCount} session${p.sessionCount === 1 ? '' : 's'} · ${ago(p.lastActivity)} ago · ${num(p.tokens)} tok`));
+  const bits = [`${p.sessionCount} session${p.sessionCount === 1 ? '' : 's'}`, `${ago(p.lastActivity)} ago`];
+  if (p.agenda?.length) bits.push(`${p.agenda.length} agenda task${p.agenda.length === 1 ? '' : 's'}`);
+  tip.append(el('small', null, bits.join(' · ')));
   tip.hidden = false;
-  tip.style.left = `${Math.min(x + 16, r.width - 296)}px`;
-  tip.style.top = `${Math.max(8, y - 62)}px`;
+  tip.style.left = `${Math.max(6, Math.min(x + 16, r.width - 286))}px`;
+  tip.style.top = `${Math.max(6, y - 70)}px`;
+}
+canvas.addEventListener('mousemove', (e) => {
+  const { r, x, y, hit } = pointAt(e.clientX, e.clientY);
+  hover = hit;
+  if (!hit) { $('#tip').hidden = true; return; }
+  showTip(hit.p, x, y, r);
 });
 canvas.addEventListener('mouseleave', () => { hover = null; $('#tip').hidden = true; });
-canvas.addEventListener('click', () => {
-  if (!hover) return;
-  selected = hover.p;
-  document.getElementById(`card-${hover.p.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+canvas.addEventListener('click', (e) => {
+  const { hit } = pointAt(e.clientX, e.clientY);
+  if (!hit) return;
+  selected = hit.p;
+  document.getElementById(`card-${hit.p.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   render();
 });
+// touch: tap a star to see what it is, tap again to jump to its card
+canvas.addEventListener('touchstart', (e) => {
+  const tch = e.touches[0]; if (!tch) return;
+  const { r, x, y, hit } = pointAt(tch.clientX, tch.clientY);
+  if (!hit) { $('#tip').hidden = true; hover = null; return; }
+  e.preventDefault();
+  if (hover === hit) {
+    document.getElementById(`card-${hit.p.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    $('#tip').hidden = true; hover = null;
+  } else { hover = hit; showTip(hit.p, x, y, r); }
+}, { passive: false });
 
-/* ================================================================== render */
-function stat(label, value, hot) {
-  const d = el('div', `stat${hot ? ' hot' : ''}`);
-  d.append(el('b', null, value), el('span', null, label));
-  return d;
-}
+/* =================================================================== render */
 const sectionTitle = (text) => { const h = el('div', 'sec'); h.append(el('span', 'lbl', text)); return h; };
 
 function render() {
   const s = STATE; if (!s) return;
   for (const st of s.stages || []) STAGE[st.id] = st;
 
-  $('#tagline').textContent = s.projects.length
-    ? `${s.projects.length} project${s.projects.length === 1 ? '' : 's'} burning`
-    : 'no stars yet';
-
   const waitingSess = s.projects.flatMap((p) => p.sessions).filter((x) => x.needsInput);
   const pending = s.asks.length + waitingSess.length;
+  const live = s.totals.live;
 
-  const stats = $('#stats'); stats.innerHTML = '';
-  stats.append(
-    stat('projects', String(s.totals.projects)),
-    stat('live', String(s.totals.live)),
-    stat('need you', String(pending), pending > 0),
-    stat('tokens', num(s.totals.tokens))
-  );
-  if (s.totals.costUsd > 0) stats.append(stat('auto spend', money(s.totals.costUsd)));
+  $('#tagline').textContent = !s.projects.length ? 'no projects yet'
+    : `${s.projects.length} project${s.projects.length === 1 ? '' : 's'}${live ? ` · ${live} live` : ''}`;
 
   const attn = $('#btn-attention');
   attn.hidden = pending === 0;
@@ -274,13 +335,16 @@ function render() {
     if (waitingSess[0]?.link) return openLink(waitingSess[0].link);
   };
 
-  const legend = $('#legend'); legend.innerHTML = '';
+  renderFuel();
+
+  // the key explains the stages up front; hovering a star gives the full line
+  const key = $('#key'); key.innerHTML = '';
   for (const st of s.stages || []) {
-    const item = el('span');
-    const dot = el('i', 'd'); dot.style.background = st.colour;
-    item.append(dot, document.createTextNode(st.label));
+    const item = el('div', 'keyitem');
     item.title = st.detail;
-    legend.append(item);
+    const dot = el('i'); dot.style.background = st.colour;
+    item.append(dot, el('b', null, st.label), el('span', null, st.blurb.toLowerCase()));
+    key.append(item);
   }
 
   const warnHost = $('#warn'); warnHost.innerHTML = '';
@@ -290,15 +354,19 @@ function render() {
     warnHost.append(w);
   }
 
-  renderAsks(s); renderDeck(s); renderAdoptable(s); renderLimits();
+  renderAsks(s); renderDeck(s); renderAdoptable(s);
+
+  const nextTask = s.projects
+    .flatMap((p) => (p.agenda || []).filter((a) => a.nextAt).map((a) => ({ ...a, project: p.name })))
+    .sort((a, b) => a.nextAt - b.nextAt)[0];
+  const spend = s.totals.costUsd;
 
   const foot = $('#foot'); foot.innerHTML = '';
-  foot.append(
-    el('span', null, `${s.projects.reduce((a, p) => a + p.sessionCount, 0)} transcripts indexed`),
-    el('span', null, `${s.activeRuns} headless run${s.activeRuns === 1 ? '' : 's'} in flight`),
-    el('span', null, s.settings.autonomyEnabled ? 'autonomy enabled' : 'autonomy paused'),
-    el('span', null, s.settings.workspaceRoot)
-  );
+  foot.append(el('span', null, nextTask ? `next run: ${nextTask.project} · ${nextTask.title} ${until(nextTask.nextAt)}` : 'no scheduled runs'));
+  foot.append(el('span', null, `${s.activeRuns} run${s.activeRuns === 1 ? '' : 's'} in flight`));
+  foot.append(el('span', null, s.settings.autonomyEnabled ? 'autonomy enabled' : 'autonomy paused'));
+  if (spend > 0) foot.append(el('span', null, `${money(spend)} spent by unattended runs`));
+
   layout();
 }
 
@@ -309,7 +377,7 @@ function renderAsks(s) {
     const q = el('div', 'q');
     q.append(el('div', 'who lbl', `${a.projectName} · ${a.taskTitle} · ${ago(a.createdAt)} ago`));
     q.append(el('div', 'txt', a.question));
-    if (a.context) q.append(el('div', 'ctx', a.context.slice(0, 380)));
+    if (a.context) q.append(el('div', 'ctx', a.context.slice(0, 360)));
     const acts = el('div', 'acts');
     const answer = el('button', 'btn primary', 'Answer');
     answer.onclick = () => openLink(a.link);
@@ -325,18 +393,17 @@ function renderDeck(s) {
   const deck = $('#deck'); deck.innerHTML = '';
   if (!s.projects.length) {
     const e = el('div', 'empty');
-    e.append(el('h3', null, 'No stars yet'));
-    e.append(el('p', null, 'Create a project and Sundust scaffolds the folder, briefs the agent, and starts running its agenda on a schedule.'));
+    e.append(el('h3', null, 'No projects yet'));
+    e.append(el('p', null, 'Create one and Sundust scaffolds the folder, briefs the agent, and starts running its agenda on a schedule.'));
     const b = el('button', 'btn primary', 'New project'); b.onclick = openNew;
     e.append(b); deck.append(e); return;
   }
 
   for (const p of s.projects) {
-    const colour = stageColour(p.stage);
     const attn = STAGE[p.stage]?.needsHuman;
     const card = el('div', `card${attn ? ' attn' : ''}`);
     card.id = `card-${p.id}`;
-    card.style.setProperty('--stage', colour);
+    card.style.setProperty('--stage', stageColour(p.stage));
 
     const top = el('div', 'card-top');
     top.append(el('div', 'glyph', p.emoji));
@@ -348,11 +415,8 @@ function renderDeck(s) {
     const meta = el('div', 'meta');
     meta.append(el('span', null, `${ago(p.lastActivity)} ago`));
     meta.append(el('span', null, `${p.sessionCount} session${p.sessionCount === 1 ? '' : 's'}`));
-    if (p.tokens) meta.append(el('span', null, `${num(p.tokens)} tok`));
-    if (p.costUsd) meta.append(el('span', null, money(p.costUsd)));
-    meta.append(el('span', null, p.autonomy));
-    const hz = el('span', 'hz', (STATE.harnesses.find((x) => x.id === p.harness)?.label) || p.harness);
-    meta.append(hz);
+    meta.append(el('span', 'chip', (STATE.harnesses.find((x) => x.id === p.harness)?.label) || p.harness));
+    meta.append(el('span', 'chip', p.autonomy));
     card.append(meta);
 
     if (p.sessions.length) {
@@ -373,7 +437,9 @@ function renderDeck(s) {
       for (const t of p.agenda) {
         const row = el('div', `task${t.enabled ? '' : ' off'}${t.source === 'claude' ? ' cloud' : ''}`);
         row.append(el('span', 'mk', t.source === 'claude' ? '◆' : '·'));
-        row.append(el('span', 'tt', t.title), el('span', 'cron', t.human));
+        row.append(el('span', 'tt', t.title));
+        row.append(el('span', 'when', t.source === 'claude' ? t.human : until(t.nextAt)));
+        row.title = `${t.human}${t.nextAt ? ` — next ${new Date(t.nextAt).toLocaleString()}` : ''}`;
         if (t.source !== 'claude') {
           const go = el('button', 'btn ghost', '▶');
           go.title = 'Run now';
@@ -429,36 +495,7 @@ function renderAdoptable(s) {
   }
 }
 
-/* ================================================================== limits */
-function renderLimits() {
-  const q = $('#lim-search').value.toLowerCase().trim();
-  const rows = (STATE.limits || []).filter((r) =>
-    !q || `${r.harness} ${r.group} ${r.key} ${r.value} ${r.detail || ''} ${r.tags || ''}`.toLowerCase().includes(q));
-  const table = $('#lim-table'); table.innerHTML = '';
-  if (!rows.length) { table.append(el('div', 'lim-row', 'nothing matches')); }
-  const label = (id) => STATE.harnesses.find((h) => h.id === id)?.label || id;
-  for (const r of rows) {
-    const row = el('div', 'lim-row');
-    row.append(el('span', 'h', label(r.harness)));
-    row.append(el('span', 'k', `${r.group} · ${r.key}`));
-    const v = el('span', 'v'); v.append(document.createTextNode(r.value));
-    if (r.detail) v.append(el('em', null, r.detail));
-    row.append(v);
-    row.append(el('span', `conf ${r.confidence}`, r.confidence));
-    table.append(row);
-  }
-  const note = $('#lim-note'); note.innerHTML = '';
-  note.append(document.createTextNode(
-    `${rows.length} of ${STATE.limits.length} rows · checked ${STATE.limitsAsOf} · vendors publish context and output windows but mostly not the token counts behind subscription limits, so “estimate” rows are community-reported. Sources: `));
-  (STATE.limitSources || []).forEach((s, i) => {
-    if (i) note.append(document.createTextNode(' · '));
-    const a = el('a', null, s.label); a.href = s.url; a.target = '_blank'; a.rel = 'noreferrer';
-    note.append(a);
-  });
-}
-$('#lim-search').addEventListener('input', renderLimits);
-
-/* ===================================================================== new */
+/* ====================================================================== new */
 let chosenTemplate = 'blank';
 function openNew() {
   const dlg = $('#dlg-new');
@@ -475,14 +512,12 @@ function openNew() {
   if (!hsel.options.length) {
     for (const h of STATE.harnesses) {
       const o = el('option', null, `${h.label} — ${h.vendor}`);
-      o.value = h.id;
-      hsel.append(o);
+      o.value = h.id; hsel.append(o);
     }
     hsel.value = 'claude-code';
     hsel.onchange = harnessHint;
   }
   harnessHint();
-
   const name = $('#new-name');
   const slug = (v) => String(v).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const upd = () => { $('#new-path').textContent = name.value ? `${STATE.settings.workspaceRoot}/${slug(name.value)}`.replace(/^\/Users\/[^/]+/, '~') : ''; };
@@ -490,22 +525,19 @@ function openNew() {
   if (!dlg.open) { closeDialogs(); dlg.showModal(); }
   name.focus();
 }
-
 function harnessHint() {
   const h = STATE.harnesses.find((x) => x.id === $('#new-harness').value);
   $('#harness-hint').textContent = !h ? '' : h.support === 'full'
-    ? `${h.bin} · transcripts indexed, sessions one click away, headless runs supported`
+    ? `${h.bin} · sessions indexed and one click away, headless runs supported`
     : `${h.bin} · headless runs and scheduling work; session indexing and deep links are not wired up yet`;
 }
-
 $('#new-create').onclick = async () => {
   const name = $('#new-name').value.trim();
   if (!name) return toast('give it a name', true);
   try {
     const r = await post('/api/project', {
       name, template: chosenTemplate,
-      autonomy: $('#new-autonomy').value,
-      harness: $('#new-harness').value
+      autonomy: $('#new-autonomy').value, harness: $('#new-harness').value
     });
     $('#dlg-new').close(); $('#new-name').value = '';
     toast(`${r.project.name} created`);
@@ -514,7 +546,7 @@ $('#new-create').onclick = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
-/* ===================================================================== run */
+/* ====================================================================== run */
 let runTarget = null;
 function openRun(p) {
   runTarget = p;
@@ -535,12 +567,10 @@ $('#run-go').onclick = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
-/* ================================================================= palette */
+/* ================================================================== palette */
 function paletteItems() {
   const out = [];
-  for (const a of STATE.asks) {
-    out.push({ kind: 'answer', hot: true, icon: '◆', label: `${a.projectName}: ${a.question}`, run: () => openLink(a.link) });
-  }
+  for (const a of STATE.asks) out.push({ kind: 'answer', hot: true, icon: '◆', label: `${a.projectName}: ${a.question}`, run: () => openLink(a.link) });
   for (const p of STATE.projects) {
     for (const x of p.sessions.filter((v) => v.needsInput)) {
       out.push({ kind: 'waiting', hot: true, icon: '◆', label: `${p.name} · ${x.title}`, run: () => openLink(x.link) });
@@ -560,32 +590,13 @@ function paletteItems() {
         run: async () => { try { await post('/api/run', { projectId: p.id, taskId: t.id }); toast('running'); refresh(); } catch (e) { toast(e.message, true); } } });
     }
   }
-  // limits are searchable from the same box
-  const hl = (id) => STATE.harnesses.find((h) => h.id === id)?.label || id;
-  for (const r of STATE.limits || []) {
-    out.push({
-      kind: 'limit', icon: '◷',
-      label: `${hl(r.harness)} · ${r.key}: ${r.value}${r.detail ? ` — ${r.detail}` : ''}`,
-      search: `${r.harness} ${r.group} ${r.tags || ''}`,
-      run: () => {
-        closeDialogs();
-        $('#lim-search').value = r.key;
-        renderLimits();
-        $('#lim-search').scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    });
-  }
   return out;
 }
-
 let palIdx = 0, palShown = [];
 function renderPalette() {
   const q = $('#pal-input').value.toLowerCase().trim();
   const all = paletteItems();
-  palShown = (q
-    ? all.filter((i) => `${i.label} ${i.kind} ${i.search || ''}`.toLowerCase().includes(q))
-    : all.filter((i) => i.kind !== 'limit')
-  ).slice(0, 40);
+  palShown = (q ? all.filter((i) => `${i.label} ${i.kind}`.toLowerCase().includes(q)) : all).slice(0, 40);
   palIdx = Math.min(palIdx, Math.max(0, palShown.length - 1));
   const list = $('#pal-list'); list.innerHTML = '';
   palShown.forEach((i, n) => {
@@ -606,7 +617,6 @@ function openPalette() {
   $('#pal-input').value = ''; palIdx = 0; renderPalette();
   closeDialogs(); $('#dlg-palette').showModal(); $('#pal-input').focus();
 }
-
 addEventListener('keydown', (e) => {
   const typing = /input|textarea|select/i.test(document.activeElement?.tagName || '');
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
@@ -618,7 +628,7 @@ $('#btn-palette').onclick = openPalette;
 $('#btn-new').onclick = openNew;
 for (const b of document.querySelectorAll('[data-close]')) b.onclick = (e) => e.target.closest('dialog').close();
 
-/* ==================================================================== boot */
+/* ===================================================================== boot */
 async function refresh() {
   try { STATE = await api('/api/state'); render(); }
   catch (e) { toast(`could not read state: ${e.message}`, true); }

@@ -38,6 +38,18 @@ export function cronMatches(expr, date = new Date()) {
   );
 }
 
+/** Next time this cron fires, or null if it will not inside a fortnight. */
+export function nextFire(expr, from = new Date()) {
+  const d = new Date(from.getTime());
+  d.setSeconds(0, 0);
+  d.setMinutes(d.getMinutes() + 1);
+  for (let i = 0; i < 60 * 24 * 14; i++) {
+    if (cronMatches(expr, d)) return d.getTime();
+    d.setMinutes(d.getMinutes() + 1);
+  }
+  return null;
+}
+
 export function describeCron(expr) {
   const f = String(expr).trim().split(/\s+/);
   if (f.length !== 5) return expr;

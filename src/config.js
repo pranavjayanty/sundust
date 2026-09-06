@@ -18,7 +18,9 @@ export const DEFAULT_SETTINGS = {
   port: 4173,
   // Where `sundust new` creates project folders.
   workspaceRoot: path.join(HOME, 'Documents', 'code'),
-  claudeBin: 'claude',
+  // Override a harness binary path here, keyed by harness id, when it is not on PATH.
+  // e.g. { "claude-code": "/opt/homebrew/bin/claude" }
+  bins: {},
   // Daemon refuses to auto-run in a project that has a live interactive session.
   respectLiveSessions: true,
   // Global kill switch for all autonomous runs.

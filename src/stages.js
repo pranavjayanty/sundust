@@ -61,13 +61,4 @@ export function stageOf({ status, lastActivity, sessionCount = 0, runCount = 0 }
   return STAGES['main-sequence'];
 }
 
-/**
- * 0 = just now, 1 = cold. Drives the colour temperature and the horizontal
- * position on the field, the way effective temperature does on an HR diagram.
- */
-export function coolness(lastActivity) {
-  const hours = Math.max(0, Date.now() - (lastActivity || 0)) / 3600000;
-  return Math.min(1, Math.log10(1 + hours) / Math.log10(1 + 24 * 45));
-}
-
 export const stageList = () => Object.values(STAGES).sort((a, b) => a.order - b.order);

@@ -10,13 +10,12 @@ import {
 } from './projects.js';
 import { templateList, TEMPLATES } from './templates.js';
 import {
-  recentRuns, listRuns, loadAsks, resolveAsk, runTask, tick, describeCron, activeRunCount
+  recentRuns, listRuns, loadAsks, resolveAsk, runTask, tick, describeCron, nextFire, activeRunCount
 } from './autonomy.js';
 import { claudeScheduledTasks, attachToProjects } from './claude-tasks.js';
 import { stageOf, stageList } from './stages.js';
 import { harnessList, DEFAULT_HARNESS } from './harnesses.js';
-import { LIMITS, SOURCES, LIMITS_AS_OF } from './limits.js';
-import * as deep from './deeplink.js';
+import { readUsage } from './usage.js';
 import { linksFor } from './deeplink.js';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
@@ -63,6 +62,11 @@ export function buildState() {
     );
     const tokens = ss.reduce((n, s) => n + (s.tokens?.total || 0), 0);
     const cost = runs.reduce((n, r) => n + (r.costUsd || 0), 0);
+    // How much work lives here. Turns and tool calls mean something; raw token
+    // totals are dominated by cache reads and say almost nothing.
+    const activity =
+      ss.reduce((n, s) => n + (s.humanTurns || 0) * 3 + (s.toolCalls || 0) * 0.1, 0) +
+      runs.length * 2;
 
     let status = 'idle';
     if (open.length) status = 'blocked';
@@ -90,6 +94,7 @@ export function buildState() {
       asks: open,
       runs,
       lastActivity: lastActivity || p.createdAt || 0,
+      activity,
       tokens,
       costUsd: cost,
       links: {
@@ -98,7 +103,11 @@ export function buildState() {
         reveal: `file://${p.path}`
       },
       agenda: [
-        ...(p.agenda || []).map((a) => ({ ...a, source: 'sundust', human: describeCron(a.schedule) })),
+        ...(p.agenda || []).map((a) => ({
+          ...a, source: 'sundust',
+          human: describeCron(a.schedule),
+          nextAt: a.enabled && p.autonomy !== 'off' ? nextFire(a.schedule) : null
+        })),
         ...(claudeTasks.get(p.id) || []).map((t) => ({ ...t, human: t.schedule ? describeCron(t.schedule) : 'manual' }))
       ]
     };
@@ -129,9 +138,7 @@ export function buildState() {
     templates: templateList(),
     stages: stageList(),
     harnesses: harnessList(),
-    limits: LIMITS,
-    limitSources: SOURCES,
-    limitsAsOf: LIMITS_AS_OF,
+    usage: readUsage(),
     asks: asks.map((a) => {
       const proj = projects.find((p) => p.id === a.projectId);
       return { ...a, link: linksFor(proj?.harness).resume(a.sessionId) };
@@ -209,7 +216,8 @@ export function createServer() {
         return send(200, {
           project: out.project,
           seed: out.seed,
-          link: deep.newSession({ folder: out.project.path, prompt: out.seed })
+          // must follow the project's harness, not always Claude Code
+          link: linksFor(out.project.harness).open(out.project.path, out.seed)
         });
       }
 
