@@ -14,33 +14,40 @@ Serves the dashboard on `http://127.0.0.1:4173` and starts the scheduler.
 
 ## The console
 
-The page leads with whichever state you are in, because at any scale the only
-question that matters first is *is anything on me right now*.
-
-- **Something is on you** — that block owns the top of the screen: who, what,
-  and a Resume button that lands you in the exact session. Everything else
-  recedes.
-- **Nothing is on you** — it collapses to one line saying what runs next, and
-  the numbers take over.
-
-Below that: five counters (needs you / running / scheduled / failed / projects,
-each one a filter), your plan usage, and the roster.
+One screen, no hero block. Five counters, your plan usage, and the roster — and
+the roster is where the work happens.
 
 The roster is a **table, not cards**. Cards stop working somewhere around eight
-projects; a dense sortable table still works at forty. Rows group by state,
-sort by any column, filter by name or path, and the whole row is one click into
-the session that wants you.
+projects; a dense sortable table still works at forty. Rows group by state, sort
+by any column, filter by name or path (`/`), and the whole row is one click into
+whatever wants you. When something *is* on you, the row swaps the folder path for
+the actual question the agent asked, so you can read the queue without opening
+anything.
 
-Amber is the brand and the one attention colour. Everything else stays neutral
-until it has something to say. Numerics are monospace so columns line up when
-you scan. Light and dark are both real themes built from the same tokens —
-toggle in the header, with `t`, or from the palette.
+Amber belongs to the wordmark and nothing else. Emphasis elsewhere is carried by
+ink weight — a live count is bright, a zero is dim — and only failure gets a
+second hue. Helvetica titles and labels, SF Pro for prose and data, monospace for
+numerics so columns line up when you scan.
 
-The quiet line-work behind the header state is generated, not drawn: a flow
-field when something needs you, still concentric rings when nothing does. It is
-procedural SVG in the [Book of Shapes](https://bookofshapes.com) idiom — many
-fine strokes, one colour, no fill — kept under 20% opacity so it never competes
-with the data.
+Light and dark are both real themes from one token set. Toggle in the header,
+with `t`, or from the palette; the choice is applied before first paint so there
+is no flash.
+
+## The field
+
+The page sits on a live line field rather than inside boxes. Thirty-eight fine
+streamlines drift across the viewport and **bend toward the pointer** — an
+inverse-square falloff, so it curves like a lens instead of kinking, and eases so
+the motion feels weighted. First contact snaps the well under the cursor rather
+than dragging it in from off-screen.
+
+Smaller marks answer the same gravity: a dot lattice on the counters that slides
+and swells toward the pointer, concentric rings that lean, a hatch that shears.
+All procedural, in the [Book of Shapes](https://bookofshapes.com) idiom — many
+fine elements, one colour, no fill — and all under about 17% opacity so they stay
+texture rather than decoration. One shared pointer listener drives every mark,
+marks outside the viewport are skipped, and everything stops under
+`prefers-reduced-motion`.
 
 ## States
 
@@ -199,7 +206,8 @@ src/autonomy.js    cron, headless runner, NEEDS INPUT parsing
 src/claude-tasks.js reads Claude Code's own scheduler
 src/deeplink.js    harness-aware links
 src/server.js      HTTP API + SSE
-web/shapes.js      generative SVG texture (flow fields, rings)
+web/field.js       full-viewport line field with pointer gravity
+web/marks.js       small reactive marks (dots, rings, hatch)
 web/               vanilla console, no build step
 ```
 

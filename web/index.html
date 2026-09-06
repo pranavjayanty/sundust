@@ -5,48 +5,41 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Sundust</title>
 <link rel="stylesheet" href="/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a0a0b'/><circle cx='16' cy='16' r='6' fill='%23ffb020'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230b0b0c'/><circle cx='16' cy='16' r='5.5' fill='%23ffb020'/></svg>">
 <script>
-  // set before first paint so there is no flash of the wrong theme
   try { const t = localStorage.getItem('sundust-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
 </script>
 </head>
 <body>
+<canvas id="field" aria-hidden="true"></canvas>
 
 <header class="bar">
   <div class="wrap bar-in">
     <div class="word"><span class="dot"></span>Sundust</div>
     <div class="bar-actions">
-      <button class="btn icon" id="btn-theme" title="Toggle theme" aria-label="Toggle theme"></button>
+      <button class="btn icon" id="btn-theme" title="Toggle theme (t)" aria-label="Toggle theme"></button>
       <button class="btn" id="btn-palette" title="Command palette"><kbd>⌘K</kbd></button>
-      <button class="btn primary" id="btn-new">New project</button>
+      <button class="btn solid" id="btn-new">New project</button>
     </div>
   </div>
 </header>
 
 <main class="wrap">
   <div id="warn"></div>
-
-  <!-- leads with whatever state you are in -->
-  <section class="state" id="state">
-    <div class="state-shape" id="state-shape"></div>
-    <div class="state-in" id="state-in"></div>
-  </section>
-
-  <section class="tiles" id="tiles"></section>
+  <section class="counts" id="counts"></section>
   <section class="usage" id="usage"></section>
 
   <section class="roster">
     <div class="roster-head">
       <span class="lbl">Projects</span>
       <input class="filter" id="filter" placeholder="Filter by name or path…" autocomplete="off">
-      <span class="lbl" id="roster-count"></span>
+      <span class="tag" id="roster-count"></span>
     </div>
-    <div class="tbl" id="tbl"></div>
+    <div id="tbl"></div>
   </section>
 
   <section class="panels" id="panels"></section>
-  <section id="adoptable" style="margin-top:var(--s6)"></section>
+  <section id="adoptable" style="padding-top:var(--s6)"></section>
   <footer class="foot" id="foot"></footer>
 </main>
 
@@ -66,7 +59,7 @@
   </label>
   <p class="path-preview" id="new-path"></p>
   <div class="row end"><button class="btn" data-close>Cancel</button>
-    <button class="btn primary" id="new-create">Create &amp; open</button></div>
+    <button class="btn solid" id="new-create">Create &amp; open</button></div>
 </dialog>
 
 <dialog class="palette" id="dlg-palette">
@@ -79,7 +72,7 @@
   <p class="sub" id="run-sub"></p>
   <label class="field"><span>What should it do?</span><textarea id="run-prompt" rows="5" placeholder="Check for anything new and summarise what changed."></textarea></label>
   <div class="row end"><button class="btn" data-close>Cancel</button>
-    <button class="btn primary" id="run-go">Run headless</button></div>
+    <button class="btn solid" id="run-go">Run headless</button></div>
 </dialog>
 
 <script type="module" src="/app.js"></script>

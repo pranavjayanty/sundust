@@ -1,30 +1,28 @@
-import { paint } from '/shapes.js';
+import { startField } from '/field.js';
+import { attachDots, attachRings, attachHatch } from '/marks.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
 
 let STATE = null;
 let filterText = '';
-let tileFilter = null;                 // clicking a tile scopes the roster
+let countFilter = null;
 let sortBy = 'state', sortDir = 1;
+const attached = new WeakSet();   // marks bind once per canvas
 
 /* ------------------------------------------------------------------- theme */
-const THEMES = ['dark', 'light'];
-function currentTheme() {
-  return document.documentElement.dataset.theme
-    || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-}
+const currentTheme = () => document.documentElement.dataset.theme
+  || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 function setTheme(t) {
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem('sundust-theme', t); } catch {}
-  paintShapes();
   drawThemeIcon();
 }
 function drawThemeIcon() {
   const dark = currentTheme() === 'dark';
   $('#btn-theme').innerHTML =
     `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-       <circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.3"/>
+       <circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
        <path d="M8 1.6 A6.4 6.4 0 0 ${dark ? 1 : 0} 8 14.4 Z" fill="currentColor"/>
      </svg>`;
 }
@@ -70,54 +68,35 @@ function until(ts) {
 const money = (n) => `$${n < 1 ? n.toFixed(2) : n.toFixed(n < 100 ? 2 : 0)}`;
 const short = (p) => p.replace(/^\/Users\/[^/]+/, '~');
 
-/* ------------------------------------------------------------------ shapes */
-function paintShapes() {
-  const host = $('#state-shape'); if (!host || !STATE) return;
-  const w = host.clientWidth || 900, h = host.clientHeight || 190;
-  const attention = pendingItems().length > 0;
-  host.style.color = attention ? 'var(--amber)' : 'var(--ink)';
-  host.style.opacity = attention ? '.20' : '.10';
-  paint(host, attention ? 'flow' : 'rings', Math.max(320, w), Math.max(120, h),
-    attention ? { lines: 22, step: 7, len: 90, seed: 1.3 } : { count: 15, seed: 2.2 });
-}
-addEventListener('resize', () => { paintShapes(); });
-
-/* ------------------------------------------------------ what is on you now */
+/** Everything currently sitting on the human, newest intent first. */
 function pendingItems() {
   if (!STATE) return [];
   const out = [];
   for (const a of STATE.asks) {
-    out.push({ kind: 'question', project: a.projectName, text: a.question,
-      meta: `${a.taskTitle} · asked ${ago(a.createdAt)} ago`, link: a.link, askId: a.id });
+    out.push({ kind: 'question', project: a.projectName, projectId: a.projectId,
+      text: a.question, link: a.link, askId: a.id });
   }
   for (const p of STATE.projects) {
     for (const s of p.sessions.filter((x) => x.needsInput)) {
-      out.push({ kind: 'session', project: p.name, text: s.title,
-        meta: `session waiting at the prompt · ${ago(s.lastActivity)} ago`, link: s.link });
+      out.push({ kind: 'session', project: p.name, projectId: p.id, text: s.title, link: s.link });
     }
   }
   for (const p of STATE.projects) {
     const r = p.runs?.[0];
     if (p.state === 'failed' && r) {
-      out.push({ kind: 'failure', project: p.name, text: r.taskTitle,
-        meta: (r.error || 'run failed').slice(0, 110), link: p.links.open });
+      out.push({ kind: 'failure', project: p.name, projectId: p.id,
+        text: (r.error || 'run failed').slice(0, 120), link: p.links.open });
     }
   }
   return out;
 }
+const pendingFor = (id) => pendingItems().filter((x) => x.projectId === id);
 
 /* ------------------------------------------------------------------ render */
 function render() {
   const s = STATE; if (!s) return;
-  renderState(s);
-  renderTiles(s);
-  renderUsage(s);
-  renderRoster(s);
-  renderPanels(s);
-  renderAdoptable(s);
-  renderWarn(s);
-  renderFoot(s);
-  requestAnimationFrame(paintShapes);
+  renderWarn(s); renderCounts(s); renderUsage(s);
+  renderRoster(s); renderPanels(s); renderAdoptable(s); renderFoot(s);
 }
 
 function renderWarn(s) {
@@ -128,77 +107,34 @@ function renderWarn(s) {
   host.append(w);
 }
 
-function renderState(s) {
-  const items = pendingItems();
-  const box = $('#state');
-  const host = $('#state-in'); host.innerHTML = '';
-  box.className = `state ${items.length ? 'attention' : 'clear'}`;
-
-  const head = el('div', 'state-head');
-  head.append(el('span', 'lbl k', items.length ? 'On you' : 'Standing by'));
-  head.append(el('h2', null, items.length
-    ? `${items.length} thing${items.length === 1 ? '' : 's'} need${items.length === 1 ? 's' : ''} you`
-    : 'Nothing needs you'));
-  host.append(head);
-
-  if (items.length) {
-    for (const it of items.slice(0, 6)) {
-      const row = el('div', 'block');
-      row.append(el('div', 'who', it.project));
-      const what = el('div', 'what');
-      what.append(document.createTextNode(it.text));
-      what.append(el('em', null, it.meta));
-      row.append(what);
-      const go = el('div', 'go');
-      const b = el('button', 'btn primary', it.kind === 'failure' ? 'Inspect' : 'Resume');
-      b.onclick = () => openLink(it.link);
-      go.append(b);
-      if (it.askId) {
-        const d = el('button', 'btn ghost', 'Dismiss');
-        d.onclick = async () => { await post('/api/ask/resolve', { id: it.askId }); refresh(); };
-        go.append(d);
-      }
-      row.append(go);
-      host.append(row);
-    }
-    if (items.length > 6) host.append(el('div', 'clear-line', `+${items.length - 6} more`));
-    return;
-  }
-
-  // calm state: say what happens next instead of leaving a void
-  const next = s.projects
-    .flatMap((p) => (p.agenda || []).filter((a) => a.nextAt).map((a) => ({ ...a, project: p.name })))
-    .sort((a, b) => a.nextAt - b.nextAt)[0];
-  const line = el('div', 'clear-line');
-  line.append(el('span', null, next
-    ? `Next up: ${next.project} · ${next.title}`
-    : 'No scheduled work. Add an agenda task to a project to have it run on its own.'));
-  if (next) line.append(el('span', 'tag amber', `in ${until(next.nextAt)}`));
-  host.append(line);
-}
-
-function tile(label, value, cls, filterKey) {
-  const b = el('button', `tile${cls ? ` ${cls}` : ''}`);
-  b.setAttribute('aria-pressed', String(tileFilter === filterKey));
+function countBtn(label, value, key, opts = {}) {
+  const b = el('button', `count${value > 0 ? ' on' : ''}${opts.bad ? ' bad' : ''}`);
+  b.setAttribute('aria-pressed', String(countFilter === key));
   b.append(el('div', 'v', String(value)), el('div', 'k', label));
+  if (opts.mark) {
+    const c = document.createElement('canvas');
+    c.className = 'mark';
+    b.append(c);
+    if (!attached.has(c)) { attached.add(c); opts.mark(c); }
+  }
   b.onclick = () => {
-    tileFilter = tileFilter === filterKey ? null : filterKey;
+    countFilter = countFilter === key ? null : key;
     render();
-    if (tileFilter) $('#tbl').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (countFilter) $('#tbl').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   return b;
 }
 
-function renderTiles(s) {
-  const host = $('#tiles'); host.innerHTML = '';
+function renderCounts(s) {
+  const host = $('#counts'); host.innerHTML = '';
   const by = (id) => s.projects.filter((p) => p.state === id).length;
   const pending = pendingItems().length;
   host.append(
-    tile('Needs you', pending, pending ? 'hot' : '', 'attention'),
-    tile('Running', by('running') + s.activeRuns, '', 'running'),
-    tile('Scheduled', by('scheduled'), '', 'scheduled'),
-    tile('Failed', by('failed'), by('failed') ? 'bad' : '', 'failed'),
-    tile('Projects', s.projects.length, '', null)
+    countBtn('Needs you', pending, 'attention', { mark: (c) => attachDots(c, { gap: 9, pull: 7, radius: 110 }) }),
+    countBtn('Running', by('running') + s.activeRuns, 'running'),
+    countBtn('Scheduled', by('scheduled'), 'scheduled'),
+    countBtn('Failed', by('failed'), 'failed', { bad: true }),
+    countBtn('Projects', s.projects.length, null, { mark: (c) => attachRings(c, { count: 9, pull: 11, radius: 130 }) })
   );
 }
 
@@ -218,14 +154,14 @@ function renderUsage(s) {
     fill.style.width = `${Math.max(c.percent, c.percent > 0 ? 2 : 0)}%`;
     track.append(fill); g.append(track);
     const foot = el('div', 'ugfoot');
-    foot.append(el('span', null, `peak ${c.peak}%`), el('span', null, c.lastReset ? `reset ${ago(c.lastReset)} ago` : ''));
+    foot.append(el('span', null, `peak ${c.peak}%`),
+      el('span', null, c.lastReset ? `reset ${ago(c.lastReset)} ago` : ''));
     g.append(foot);
     host.append(g);
   }
-  const note = el('div', 'ug-note', u.stale
+  host.append(el('div', 'usage-note', u.stale
     ? `plan usage last sampled ${ago(u.sampledAt)} ago — open Claude Code to refresh`
-    : `plan usage · sampled ${ago(u.sampledAt)} ago · ${u.sampleCount} readings`);
-  host.append(note);
+    : `plan usage · sampled ${ago(u.sampledAt)} ago · ${u.sampleCount} readings`));
 }
 
 const COLS = [
@@ -235,7 +171,6 @@ const COLS = [
   { key: 'when', label: 'Last active', cls: 'c-when', sortable: true },
   { key: 'next', label: 'Next run', cls: 'c-next', sortable: true }
 ];
-
 function sortVal(p, key) {
   switch (key) {
     case 'name': return p.name.toLowerCase();
@@ -249,9 +184,8 @@ function sortVal(p, key) {
 
 function renderRoster(s) {
   const tbl = $('#tbl'); tbl.innerHTML = '';
-
   let rows = s.projects;
-  if (tileFilter) rows = rows.filter((p) => p.state === tileFilter);
+  if (countFilter) rows = rows.filter((p) => p.state === countFilter);
   if (filterText) {
     const q = filterText.toLowerCase();
     rows = rows.filter((p) => `${p.name} ${p.path} ${p.harness}`.toLowerCase().includes(q));
@@ -260,10 +194,8 @@ function renderRoster(s) {
     const x = sortVal(a, sortBy), y = sortVal(b, sortBy);
     return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
   });
-
-  $('#roster-count').textContent = tileFilter || filterText
-    ? `${rows.length} of ${s.projects.length}`
-    : `${s.projects.length}`;
+  $('#roster-count').textContent = countFilter || filterText
+    ? `${rows.length} / ${s.projects.length}` : `${s.projects.length}`;
 
   const head = el('div', 'tr thead');
   head.append(el('span', null, ''));
@@ -281,19 +213,16 @@ function renderRoster(s) {
     if (!s.projects.length) {
       e.append(el('h3', null, 'No projects yet'));
       e.append(el('p', null, 'Create one and Sundust scaffolds the folder, briefs the agent, and runs its agenda on a schedule.'));
-      const b = el('button', 'btn primary', 'New project'); b.onclick = openNew; e.append(b);
-    } else {
-      e.append(el('h3', null, 'Nothing matches'));
-    }
+      const b = el('button', 'btn solid', 'New project'); b.onclick = openNew; e.append(b);
+    } else e.append(el('h3', null, 'Nothing matches'));
     tbl.append(e);
     return;
   }
 
-  // group by state unless the user is sorting by something else
-  let lastGroup = null;
+  let group = null;
   for (const p of rows) {
-    if (sortBy === 'state' && p.state !== lastGroup) {
-      lastGroup = p.state;
+    if (sortBy === 'state' && p.state !== group) {
+      group = p.state;
       const meta = s.states.find((x) => x.id === p.state);
       const g = el('div', `grouphdr${p.state === 'attention' ? ' hot' : ''}`);
       g.append(el('span', 'n', meta?.label || p.state));
@@ -308,8 +237,10 @@ function renderRoster(s) {
 function rosterRow(p, s) {
   const row = el('div', 'tr');
   row.tabIndex = 0;
+  const mine = pendingFor(p.id);
   const jump = () => {
-    const nx = p.sessions.find((x) => x.needsInput) || p.sessions.find((x) => x.live);
+    if (mine[0]?.link) return openLink(mine[0].link);
+    const nx = p.sessions.find((x) => x.live);
     openLink(nx?.link || p.links.open);
   };
   row.onclick = jump;
@@ -318,21 +249,23 @@ function rosterRow(p, s) {
   row.append(el('i', `st ${p.tone}`));
 
   const nm = el('div', 'nm c-name');
-  nm.append(el('b', null, p.name), el('span', null, short(p.path)));
+  nm.append(el('b', null, p.name));
+  // when something is on you, the row says what it is instead of the path
+  if (mine.length) nm.append(el('span', 'q', mine[0].text));
+  else nm.append(el('span', null, short(p.path)));
   row.append(nm);
 
-  const st = el('span', `cell c-state${p.state === 'attention' ? ' amber' : ''}`, p.stateLabel);
+  const st = el('span', `cell c-state${p.state === 'attention' ? ' strong' : ''}`, p.stateLabel);
   st.title = s.states.find((x) => x.id === p.state)?.detail || '';
   row.append(st);
-
   row.append(el('span', 'cell c-sessions dim', p.sessionCount ? String(p.sessionCount) : '—'));
   row.append(el('span', 'cell c-when dim', `${ago(p.lastActivity)} ago`));
   row.append(el('span', `cell c-next${p.nextAt ? '' : ' dim'}`,
-    p.nextAt ? `in ${until(p.nextAt)}` : (p.autonomy === 'off' ? 'autonomy off' : '—')));
+    p.nextAt ? `in ${until(p.nextAt)}` : (p.autonomy === 'off' ? 'off' : '—')));
 
   const acts = el('div', 'acts');
   const mk = (label, title, fn) => {
-    const b = el('button', 'btn ghost', label);
+    const b = el('button', 'btn', label);
     b.title = title;
     b.onclick = (e) => { e.stopPropagation(); fn(); };
     return b;
@@ -346,14 +279,15 @@ function rosterRow(p, s) {
 
 function renderPanels(s) {
   const host = $('#panels'); host.innerHTML = '';
+  const line = (k, v, cls) => {
+    const r = el('div', 'r');
+    r.append(el('span', 'k', k), el('span', `v${cls ? ` ${cls}` : ''}`, String(v)));
+    return r;
+  };
 
-  // 14-day activity from session and run timestamps
   const days = 14, now = new Date(); now.setHours(23, 59, 59, 999);
   const buckets = new Array(days).fill(0);
-  const stamp = (t) => {
-    const d = Math.floor((now - t) / 86400000);
-    if (d >= 0 && d < days) buckets[days - 1 - d]++;
-  };
+  const stamp = (t) => { const d = Math.floor((now - t) / 86400000); if (d >= 0 && d < days) buckets[days - 1 - d]++; };
   for (const p of s.projects) {
     for (const x of p.sessions) stamp(x.lastActivity);
     for (const r of p.runs || []) stamp(r.startedAt);
@@ -364,7 +298,7 @@ function renderPanels(s) {
   const bars = el('div', 'bars');
   buckets.forEach((v, i) => {
     const b = el('i');
-    b.style.height = `${Math.max(2, (v / max) * 56)}px`;
+    b.style.height = `${Math.max(2, (v / max) * 48)}px`;
     if (v > 0 && i >= days - 3) b.classList.add('on');
     b.title = `${v} event${v === 1 ? '' : 's'}`;
     bars.append(b);
@@ -375,46 +309,38 @@ function renderPanels(s) {
   act.append(x);
   host.append(act);
 
-  // where the work sits
-  const dist = el('div', 'panel');
-  dist.append(el('h3', null, 'Fleet'));
+  const fleet = el('div', 'panel');
+  fleet.append(el('h3', null, 'Fleet'));
   const kv = el('div', 'kv');
-  const line = (k, v, dim) => {
-    const r = el('div', 'r');
-    r.append(el('span', 'k', k), el('span', `v${dim ? ' dim' : ''}`, String(v)));
-    return r;
-  };
   const auto = { off: 0, read: 0, edit: 0 };
   for (const p of s.projects) auto[p.autonomy] = (auto[p.autonomy] || 0) + 1;
   const tasks = s.projects.reduce((n, p) => n + (p.agenda || []).length, 0);
+  kv.append(line('Agenda tasks', tasks, tasks ? '' : 'dim'));
+  kv.append(line('Autonomy · edit', auto.edit || 0, auto.edit ? '' : 'dim'));
+  kv.append(line('Autonomy · read', auto.read || 0, auto.read ? '' : 'dim'));
+  kv.append(line('Autonomy · off', auto.off || 0, auto.off ? '' : 'dim'));
   const harnesses = {};
   for (const p of s.projects) harnesses[p.harness] = (harnesses[p.harness] || 0) + 1;
-  kv.append(line('Agenda tasks', tasks, !tasks));
-  kv.append(line('Autonomy · edit', auto.edit || 0, !auto.edit));
-  kv.append(line('Autonomy · read', auto.read || 0, !auto.read));
-  kv.append(line('Autonomy · off', auto.off || 0, !auto.off));
   for (const [h, n] of Object.entries(harnesses)) {
-    kv.append(line(s.harnesses.find((x) => x.id === h)?.label || h, n));
+    kv.append(line(s.harnesses.find((z) => z.id === h)?.label || h, n));
   }
   if (s.totals.costUsd > 0) kv.append(line('Unattended spend', money(s.totals.costUsd)));
-  dist.append(kv);
-  host.append(dist);
+  fleet.append(kv);
+  const fm = document.createElement('canvas'); fm.className = 'mark';
+  fleet.append(fm);
+  if (!attached.has(fm)) { attached.add(fm); attachHatch(fm, { gap: 6, pull: 10, radius: 120 }); }
+  host.append(fleet);
 
-  // recent runs — the log a workstation wants
   const runs = (s.runs || []).slice(0, 6);
   const log = el('div', 'panel');
   log.append(el('h3', null, 'Recent runs'));
   const kv2 = el('div', 'kv');
-  if (!runs.length) kv2.append(line('No unattended runs yet', '', true));
+  if (!runs.length) kv2.append(line('No unattended runs yet', '', 'dim'));
   for (const r of runs) {
     const row = el('div', 'r');
     const k = el('span', 'k', `${r.projectName} · ${r.taskTitle}`);
     k.title = (r.summary || r.error || '').slice(0, 400);
-    row.append(k);
-    const v = el('span', 'v');
-    v.textContent = r.ok ? `ok ${ago(r.endedAt)}` : 'failed';
-    v.style.color = r.ok ? 'var(--ink-2)' : 'var(--bad)';
-    row.append(v);
+    row.append(k, el('span', `v${r.ok ? '' : ' bad'}`, r.ok ? ago(r.endedAt) : 'failed'));
     kv2.append(row);
   }
   log.append(kv2);
@@ -459,9 +385,7 @@ function openNew() {
   }
   const hsel = $('#new-harness');
   if (!hsel.options.length) {
-    for (const h of STATE.harnesses) {
-      const o = el('option', null, `${h.label} — ${h.vendor}`); o.value = h.id; hsel.append(o);
-    }
+    for (const h of STATE.harnesses) { const o = el('option', null, `${h.label} — ${h.vendor}`); o.value = h.id; hsel.append(o); }
     hsel.value = 'claude-code';
     hsel.onchange = harnessHint;
   }
@@ -563,7 +487,6 @@ function openPalette() {
   closeDialogs(); $('#dlg-palette').showModal(); $('#pal-input').focus();
 }
 $('#filter').addEventListener('input', (e) => { filterText = e.target.value; renderRoster(STATE); });
-
 addEventListener('keydown', (e) => {
   const typing = /input|textarea|select/i.test(document.activeElement?.tagName || '');
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
@@ -581,6 +504,7 @@ async function refresh() {
   try { STATE = await api('/api/state'); render(); }
   catch (e) { toast(`could not read state: ${e.message}`, true); }
 }
+startField($('#field'));
 drawThemeIcon();
 refresh();
 setInterval(refresh, 15000);
