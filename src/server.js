@@ -12,6 +12,7 @@ import { templateList, TEMPLATES } from './templates.js';
 import {
   recentRuns, listRuns, loadAsks, resolveAsk, runTask, tick, describeCron, activeRunCount
 } from './autonomy.js';
+import { claudeScheduledTasks, attachToProjects } from './claude-tasks.js';
 import * as deep from './deeplink.js';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
@@ -24,6 +25,10 @@ export function buildState() {
   const { sessions } = scanSessions();
   const projects = loadProjects();
   const asks = loadAsks().filter((a) => !a.resolved);
+
+  // Claude Code has its own scheduler; show those tasks beside Orrery's agenda
+  // so one screen answers "what runs on its own?" regardless of which fired it.
+  const { byProject: claudeTasks, loose: looseTasks } = attachToProjects(claudeScheduledTasks(), projects);
 
   const byProject = new Map(projects.map((p) => [p.id, []]));
   const unassigned = [];
@@ -71,7 +76,10 @@ export function buildState() {
       lastActivity: lastActivity || p.createdAt || 0,
       tokens,
       costUsd: cost,
-      agenda: (p.agenda || []).map((a) => ({ ...a, human: describeCron(a.schedule) }))
+      agenda: [
+        ...(p.agenda || []).map((a) => ({ ...a, source: 'orrery', human: describeCron(a.schedule) })),
+        ...(claudeTasks.get(p.id) || []).map((t) => ({ ...t, human: t.schedule ? describeCron(t.schedule) : 'manual' }))
+      ]
     };
   });
 
@@ -102,6 +110,7 @@ export function buildState() {
     runs: allRuns,
     activeRuns: activeRunCount(),
     unassignedSessions: unassigned.slice(0, 20),
+    claudeTasks: looseTasks,
     totals: {
       projects: enriched.length,
       live: enriched.reduce((n, p) => n + p.liveCount, 0),

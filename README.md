@@ -13,6 +13,14 @@ node bin/orrery.js up
 
 That serves the dashboard on `http://127.0.0.1:4173` and starts the scheduler.
 
+## Design
+
+Two colours and one accent. Near-black and white carry the whole interface; a
+single vibrant amber is spent **only** on what needs a human. Status is otherwise
+read from luminance, form and motion — a filled dot is live, a hollow ring is
+idle, a pulsing halo wants you. Nothing competes with amber for attention, so
+"what needs me?" is answerable from across the room.
+
 ## Why this exists
 
 Claude Code already stores everything worth knowing in `~/.claude`. What it does
@@ -126,6 +134,46 @@ State lives in `~/.orrery/` (`projects.json`, `settings.json`, `asks.json`,
 
 Adding a template is one entry in `src/templates.js`. Adding a project kind that
 needs different permissions is a `permissionArgs` field on the project record.
+
+## Prior art
+
+The ecosystem is large and worth knowing before adding to it. Star counts as of
+September 2026:
+
+| Project | Stars | What it is |
+|---|---|---|
+| [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) | 39k | Teams-first multi-agent orchestration |
+| [claude-code-router](https://github.com/musistudio/claude-code-router) | 37k | Control plane for routing across models |
+| [builderz-labs/mission-control](https://github.com/builderz-labs/mission-control) | 6.2k | Self-hosted control plane: dispatch tasks, review runs, track spend |
+| [21st-dev/1code](https://github.com/21st-dev/1code) | 5.6k | Orchestration layer for coding agents |
+| [phuryn/claude-usage](https://github.com/phuryn/claude-usage) | 2.2k | Token and cost dashboard over the same local logs |
+| [kbwo/ccmanager](https://github.com/kbwo/ccmanager) | 1.2k | Session manager across agent CLIs |
+| [Ark0N/Codeman](https://github.com/Ark0N/Codeman) | 742 | Mission control, agents 24/7 from any device |
+| [h0x91b/dev-3.0](https://github.com/h0x91b/dev-3.0) | 252 | Kanban where every card is a live agent in its own worktree |
+| [lacion/fleet-deck](https://github.com/lacion/fleet-deck) | 28 | Control plane for every Claude Code session on one machine |
+
+Every one of them is a **developer-workflow** tool: parallel agents on a codebase,
+git worktrees, kanban of coding tasks, token spend. Orrery is aimed somewhere else
+— long-lived personal projects that happen to be built with Claude, each moving on
+its own over weeks, where the question is not "which agent is on which branch" but
+"which of my things needs me today".
+
+Two ideas worth borrowing, and borrowed: Fleet Deck's rule that the tool must
+never become a dependency of the loop it observes (Orrery only ever reads
+`~/.claude`), and its conflict awareness (the scheduler refuses to run where a
+human already is).
+
+## Two schedulers
+
+Claude Code now ships its own scheduled tasks, stored at
+`~/.claude/scheduled-tasks/<id>/SKILL.md` and run by the desktop app. Orrery reads
+that directory and shows those tasks on the matching project card, marked with a
+different glyph, so one screen answers "what runs on its own?" no matter which
+scheduler fires it. Orrery never triggers them — they belong to the app.
+
+Which to use: Claude's own scheduler survives Orrery not running and is the better
+home for things that just need to happen. Orrery's agenda gives you the run
+history, the cost, the `NEEDS INPUT` inbox, and a resumable session per run.
 
 ## Requirements
 
