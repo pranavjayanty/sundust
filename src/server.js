@@ -32,13 +32,17 @@ export function buildState() {
 
   const byProject = new Map(projects.map((p) => [p.id, []]));
   const unassigned = [];
-  const sorted = [...projects].sort((a, b) => norm(b.path).length - norm(a.path).length);
+
+  // One entry per folder a project has ever lived in, longest first, so a nested
+  // project claims its own sessions and a moved project keeps its history.
+  const roots = projects
+    .flatMap((p) => [p.path, ...(p.aliases || [])].map((dir) => ({ p, dir: norm(dir) })))
+    .sort((a, b) => b.dir.length - a.dir.length);
 
   for (const s of sessions) {
     const cwd = norm(s.cwd);
-    // longest-prefix wins, so a nested project claims its own sessions
-    const owner = sorted.find((p) => cwd === norm(p.path) || cwd.startsWith(norm(p.path) + path.sep));
-    if (owner) byProject.get(owner.id).push(s);
+    const hit = roots.find(({ dir }) => cwd === dir || cwd.startsWith(dir + path.sep));
+    if (hit) byProject.get(hit.p.id).push(s);
     else unassigned.push(s);
   }
 

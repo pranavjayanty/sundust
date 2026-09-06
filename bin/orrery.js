@@ -4,7 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { createServer, buildState } from '../src/server.js';
 import { ensureDirs, getSettings } from '../src/config.js';
-import { loadProjects, scaffold, adopt } from '../src/projects.js';
+import { loadProjects, scaffold, adopt, relocate } from '../src/projects.js';
 import { tick, runTask, describeCron } from '../src/autonomy.js';
 import { TEMPLATES } from '../src/templates.js';
 import * as deep from '../src/deeplink.js';
@@ -98,6 +98,20 @@ switch (cmd) {
     break;
   }
 
+  case 'relocate': {
+    const q = (args[1] || '').toLowerCase();
+    const dir = path.resolve(args[2] || '');
+    const project = loadProjects().find((x) => x.name.toLowerCase().includes(q) || x.path.toLowerCase().includes(q));
+    if (!project) { console.error(`no project matching "${q}"`); process.exit(1); }
+    if (!args[2]) { console.error('usage: orrery relocate <match> <new-dir>'); process.exit(1); }
+    const from = project.path;
+    const p = relocate(project.id, dir);
+    console.log(`  ${p.emoji} ${C.b(p.name)}`);
+    console.log(`  ${C.dim(from)}\n  ${C.g('→')} ${dir}`);
+    console.log(C.dim(`  keeping ${p.aliases.length} old path(s) so past sessions stay attached\n`));
+    break;
+  }
+
   case 'ls':
   case 'status': {
     const s = buildState();
@@ -187,6 +201,7 @@ switch (cmd) {
                        ${C.dim('--template blank|finance|recipes|fitness|journal')}
                        ${C.dim('--autonomy off|read|edit')}
     ${C.b('adopt')} [dir]        bring an existing folder into Orrery
+    ${C.b('relocate')} <m> <dir>  point a project at a folder you moved
     ${C.b('ls')} [--v]           list projects and status
     ${C.b('next')}               jump to whatever is waiting on you
     ${C.b('go')} [match]         open a project's most relevant session

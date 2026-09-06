@@ -92,17 +92,38 @@ const isScratch = (p) => !p || p.startsWith(CLAUDE_SCRATCH) || p.includes('/scra
  * UI as one-click adopts, so an existing repo joins Orrery without any setup.
  */
 export function discoverCandidates(sessions) {
-  const known = new Set(loadProjects().map((p) => path.resolve(p.path)));
+  const known = new Set(
+    loadProjects().flatMap((p) => [p.path, ...(p.aliases || [])].map((d) => path.resolve(d)))
+  );
   const byPath = new Map();
   for (const s of sessions) {
     if (isScratch(s.cwd)) continue;
     if (!s.cwd || known.has(path.resolve(s.cwd))) continue;
+    if (!fs.existsSync(s.cwd)) continue;  // folder was moved or deleted
     const cur = byPath.get(s.cwd) || { path: s.cwd, name: path.basename(s.cwd), sessions: 0, lastActivity: 0 };
     cur.sessions++;
     cur.lastActivity = Math.max(cur.lastActivity, s.lastActivity || 0);
     byPath.set(s.cwd, cur);
   }
   return [...byPath.values()].sort((a, b) => b.lastActivity - a.lastActivity);
+}
+
+/**
+ * Point a project at a new folder, remembering where it used to live.
+ * Transcripts record the cwd they ran in, so without the alias every session
+ * from before the move would detach from its project.
+ */
+export function relocate(id, newPath) {
+  const projects = loadProjects();
+  const p = projects.find((x) => x.id === id);
+  if (!p) throw new Error(`no project ${id}`);
+  const from = path.resolve(p.path), to = path.resolve(newPath);
+  if (from === to) return p;
+  if (!fs.existsSync(to)) throw new Error(`${to} does not exist`);
+  p.aliases = [...new Set([...(p.aliases || []), from])].filter((a) => a !== to);
+  p.path = to;
+  saveProjects(projects);
+  return p;
 }
 
 export function adopt({ dir, name, template = 'blank', autonomy = 'read' }) {

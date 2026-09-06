@@ -102,6 +102,7 @@ orrery new <name>         scaffold a project and open Claude in it
                           --template blank|finance|recipes|fitness|journal
                           --autonomy off|read|edit
 orrery adopt [dir]        bring an existing folder into Orrery
+orrery relocate <m> <dir> point a project at a folder you moved
 orrery ls [--v]           list projects and status
 orrery next               jump to whatever is waiting on you
 orrery go [match]         open a project's most relevant session
@@ -128,6 +129,10 @@ src/deeplink.js    claude:// URL builders
 src/server.js      HTTP API + SSE
 web/               vanilla dashboard, no build step
 ```
+
+When a project folder moves, `orrery relocate` records the old path as an alias.
+Transcripts store the working directory they ran in, so without that alias every
+session from before the move would detach from its project.
 
 State lives in `~/.orrery/` (`projects.json`, `settings.json`, `asks.json`,
 `runs/`, `index.json`). Nothing in `~/.claude` is ever written to.
