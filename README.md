@@ -85,14 +85,49 @@ click through and keep talking to it with full context.
 
 ## The autonomy loop
 
-Every scaffolded project's brief teaches the agent one convention:
+Every scaffolded project's brief teaches the agent three conventions:
 
-> Do everything you can do unattended. If a decision genuinely needs the human,
-> end your final message with `NEEDS INPUT: <one self-contained question>`.
+> `NEEDS INPUT: <question>` when a decision genuinely needs you.
+> `NOTE: <one line>` for anything that should outlive this run.
+> `EMIT: <event> <context>` when another project now has something to do.
 
-Sundust watches for that line, turns it into a card at the top of the dashboard,
-and gives you an **Answer** button that opens the exact run that asked. The
-project flares until you deal with it.
+Sundust routes all three: questions become blocked rows you resume in one click,
+notes accumulate into durable project memory, and events fire runs in whichever
+projects subscribe to them.
+
+### Safe edits
+
+`edit` autonomy is only reasonable because nothing an agent writes is final.
+
+Before any run that may write, Sundust checkpoints the tree — HEAD plus the
+content of anything already dirty. Afterwards it records exactly which files
+changed and what they hash to. Those land in a **review queue**: the edits made
+while you were away, with per-file line counts and Keep / Revert / Open.
+
+Revert restores each file to its pre-run content and **refuses any file you have
+touched since**, reporting those back rather than overwriting your work. It never
+rewrites history and never touches the index.
+
+Projects with `edit` autonomy but no git repository are flagged *unprotected* in
+the roster, because there is nothing to checkpoint against.
+
+### Spending the plan deliberately
+
+The scheduler reads your live usage before it fires anything. Tasks carry a
+priority (`low`, `normal`, `critical`) and yield in that order as the weekly
+window fills — and they yield to you first: while your own 5-hour window is
+busy, unattended runs wait rather than competing with the session you are
+actually sitting in. Anything held back says so under the schedule.
+
+This is the clearest thing a harness cannot do for you, because it needs the
+whole fleet and the live usage curve at once.
+
+### Did the work survive?
+
+Every reviewed run keeps the before and after hash of each file it touched, so
+Sundust can answer later whether its output was **kept**, **reverted**, or
+**superseded**. Over enough runs that tells you which agenda tasks earn their
+tokens.
 
 ### Autonomy levels
 
@@ -102,11 +137,10 @@ Set per project. New projects default to `read`.
 |---|---|
 | `off` | Nothing runs unattended |
 | `read` | Look around and report; writes and shell are denied |
-| `edit` | Change files in the project |
+| `edit` | Change files in the project, checkpointed and reviewable |
 
 Two further guards, both on by default: the scheduler **skips any project with a
-live interactive session** (two agents in one tree is how you lose work), and
-`autonomyEnabled` is a global kill switch.
+live interactive session**, and `autonomyEnabled` is a global kill switch.
 
 ## Harnesses
 
@@ -199,6 +233,7 @@ src/config.js      paths, settings
 src/harnesses.js   harness definitions       ← add a harness here
 src/usage.js       plan usage, read from the desktop app's own record
 src/states.js      project state mapping
+src/checkpoint.js  git checkpoint, diff, verdict and revert
 src/scan.js        incremental transcript indexer + live-process detection
 src/projects.js    registry, scaffolding, relocation, auto-discovery
 src/templates.js   project templates         ← add your own here

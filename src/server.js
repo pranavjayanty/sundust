@@ -10,12 +10,14 @@ import {
 } from './projects.js';
 import { templateList, TEMPLATES } from './templates.js';
 import {
-  recentRuns, listRuns, loadAsks, resolveAsk, runTask, tick, describeCron, nextFire, activeRunCount
+  recentRuns, listRuns, loadAsks, resolveAsk, runTask, tick, describeCron, nextFire, fireTimes,
+  activeRunCount, recentDeferrals, runVerdict, revertRun, keepRun, readNotes, readEvents
 } from './autonomy.js';
 import { claudeScheduledTasks, attachToProjects } from './claude-tasks.js';
 import { stateOf, stateList } from './states.js';
 import { harnessList, DEFAULT_HARNESS } from './harnesses.js';
 import { readUsage } from './usage.js';
+import { isRepo } from './checkpoint.js';
 import { linksFor } from './deeplink.js';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
@@ -84,7 +86,7 @@ export function buildState() {
       ...(claudeTasks.get(p.id) || []).map((t) => ({ ...t, human: t.schedule ? describeCron(t.schedule) : 'manual' }))
     ];
     const nextAt = agenda.reduce((m, a) => (a.nextAt && (!m || a.nextAt < m) ? a.nextAt : m), null);
-    const state = stateOf({ status, hasSchedule: Boolean(nextAt) });
+    const state = stateOf({ status, hasSchedule: Boolean(nextAt), archived: p.archived });
     const L = linksFor(p.harness);
     const withLinks = ss.map((s) => ({ ...s, link: L.resume(s.id) }));
 
@@ -107,6 +109,8 @@ export function buildState() {
       activity,
       tokens,
       costUsd: cost,
+      isRepo: isRepo(p.path),
+      notes: readNotes(p.id).split('\n').filter(Boolean).length,
       links: {
         canDeepLink: L.canDeepLink,
         open: L.open(p.path),
@@ -119,6 +123,19 @@ export function buildState() {
   const rank = Object.fromEntries(stateList().map((s, i) => [s.id, i]));
   enriched.sort((a, b) => rank[a.state] - rank[b.state] || b.lastActivity - a.lastActivity);
 
+  // the next week of scheduled work, for the schedule view
+  const upcoming = [];
+  for (const p of enriched) {
+    if (p.state === 'archived' || p.autonomy === 'off') continue;
+    for (const a of p.agenda || []) {
+      if (!a.enabled || !a.schedule || a.source === 'claude') continue;
+      for (const at of fireTimes(a.schedule, 7)) {
+        upcoming.push({ at, projectId: p.id, project: p.name, task: a.title, human: a.human });
+      }
+    }
+  }
+  upcoming.sort((a, b) => a.at - b.at);
+
   // The standalone `claude` binary authenticates separately from the desktop app.
   // If it cannot, every scheduled run fails the same way — say so once, loudly.
   const allRuns = recentRuns(30);
@@ -126,9 +143,27 @@ export function buildState() {
     (r) => r.ok === false && /authenticat|oauth|logged? ?in|credential/i.test(r.error || '')
   );
 
+  // Edits made while you were away, waiting on a yes or a no.
+  const review = [];
+  for (const p of enriched) {
+    for (const r of p.runs || []) {
+      if (r.reviewed || !r.changes?.files?.length) continue;
+      review.push({
+        runId: r.runId, projectId: p.id, project: p.name,
+        task: r.taskTitle, at: r.endedAt || r.startedAt, ok: r.ok,
+        files: r.changes.files.map((f) => ({ path: f.path, insertions: f.insertions, deletions: f.deletions })),
+        verdict: runVerdict(p, r)
+      });
+    }
+  }
+  review.sort((a, b) => b.at - a.at);
+
   return {
     now: Date.now(),
     settings: getSettings(),
+    review,
+    deferrals: recentDeferrals(),
+    events: readEvents().slice(-20).reverse(),
     authWarning: authFail
       ? 'The `claude` CLI could not authenticate, so scheduled runs are failing. Run `claude` once in a terminal to sign in.'
       : null,
@@ -136,6 +171,7 @@ export function buildState() {
     candidates: discoverCandidates(sessions),
     templates: templateList(),
     states: stateList(),
+    upcoming: upcoming.slice(0, 200),
     harnesses: harnessList(),
     usage: readUsage(),
     asks: asks.map((a) => {
@@ -256,6 +292,17 @@ export function createServer() {
         done.then(broadcast);
         broadcast();
         return send(200, { runId, sessionId });
+      }
+
+      if (url.pathname === '/api/review' && req.method === 'POST') {
+        const b = await body(req);
+        const project = loadProjects().find((p) => p.id === b.projectId);
+        if (!project) return send(404, { error: 'no such project' });
+        try {
+          const out = b.action === 'revert' ? revertRun(project, b.runId) : keepRun(project, b.runId);
+          broadcast();
+          return send(200, out);
+        } catch (e) { return send(400, { error: e.message }); }
       }
 
       if (url.pathname === '/api/ask/resolve' && req.method === 'POST') {

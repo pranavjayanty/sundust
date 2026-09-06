@@ -29,13 +29,34 @@
   <section class="counts" id="counts"></section>
   <section class="usage" id="usage"></section>
 
+  <section class="review" id="review-sec" hidden>
+    <div class="sechead">
+      <canvas class="secmark" data-mark="rings"></canvas>
+      <span class="lbl">Review · edits made while you were away</span>
+      <span class="spacer"></span>
+      <span class="tag" id="review-count"></span>
+    </div>
+    <div id="review"></div>
+  </section>
+
   <section class="roster">
-    <div class="roster-head">
+    <div class="sechead">
+      <canvas class="secmark" data-mark="dots"></canvas>
       <span class="lbl">Projects</span>
       <input class="filter" id="filter" placeholder="Filter by name or path…" autocomplete="off">
       <span class="tag" id="roster-count"></span>
     </div>
     <div id="tbl"></div>
+  </section>
+
+  <section class="sched">
+    <div class="sechead">
+      <canvas class="secmark" data-mark="hatch"></canvas>
+      <span class="lbl">Schedule · next 7 days</span>
+      <span class="spacer"></span>
+      <span class="tag" id="sched-count"></span>
+    </div>
+    <div id="sched"></div>
   </section>
 
   <section class="panels" id="panels"></section>

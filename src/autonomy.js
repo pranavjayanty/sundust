@@ -2,10 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { RUNS_DIR, ASKS, getSettings, readJSON, writeJSON } from './config.js';
+import { RUNS_DIR, ASKS, EVENTS, NOTES_DIR, getSettings, readJSON, writeJSON } from './config.js';
+import { readUsage } from './usage.js';
 import { loadProjects, upsertProject } from './projects.js';
 import { scanSessions } from './scan.js';
 import { getHarness, DEFAULT_HARNESS } from './harnesses.js';
+import { snapshot, diffSince, verdict, revert as revertFiles, isRepo } from './checkpoint.js';
 
 // ---------------------------------------------------------------- cron
 
@@ -48,6 +50,20 @@ export function nextFire(expr, from = new Date()) {
     d.setMinutes(d.getMinutes() + 1);
   }
   return null;
+}
+
+/** Every time this cron fires within the next `days`, capped for sanity. */
+export function fireTimes(expr, days = 7, cap = 60) {
+  const out = [];
+  const end = Date.now() + days * 86400000;
+  let cursor = new Date();
+  for (let i = 0; i < cap; i++) {
+    const next = nextFire(expr, cursor);
+    if (!next || next > end) break;
+    out.push(next);
+    cursor = new Date(next + 60000);
+  }
+  return out;
 }
 
 export function describeCron(expr) {
@@ -106,7 +122,7 @@ export function recentRuns(limit = 40) {
     .slice(0, limit);
 }
 
-const PREAMBLE = `You are running unattended, on a schedule, with no human watching.
+const PREAMBLE_HEAD = `You are running unattended, on a schedule, with no human watching.
 
 Do everything you can do without a human. Do not ask clarifying questions mid-run.
 If — and only if — a decision genuinely needs the human before this work can
@@ -117,11 +133,93 @@ NEEDS INPUT: <one self-contained question>
 Finish with a short plain-text summary of what you actually did. If there was
 nothing to do, say that in one line rather than inventing work.
 
+If something you learn should outlive this run — a decision, a constraint, a dead
+end worth not repeating — put it on its own line as:
+
+NOTE: <one line>
+
+If your work means another project has something to do, say so as:
+
+EMIT: <event-name> <one line of context>
+
 --- TASK ---
 `;
 
+/** Full preamble for a run, including whatever this project already knows. */
+function preambleFor(project) {
+  const notes = readNotes(project.id).trim();
+  const memory = notes
+    ? `\n--- WHAT THIS PROJECT ALREADY KNOWS ---\n${notes.split('\n').slice(-40).join('\n')}\n`
+    : '';
+  return PREAMBLE_HEAD + memory;
+}
+
 const active = new Set();
 export const activeRunCount = () => active.size;
+
+/**
+ * Should this run start right now, given what is left of the plan?
+ *
+ * No harness can answer this: it needs the whole fleet plus the live usage
+ * curve. Critical work always proceeds; everything else yields, and yields
+ * first to you — if your own 5-hour window is busy, unattended runs wait rather
+ * than competing with the session you are actually sitting in.
+ */
+export function budgetGate(priority = 'normal', usage = readUsage(), settings = getSettings()) {
+  const b = settings.budget;
+  if (!b?.enabled || !usage?.available) return { ok: true };
+  const pct = (k) => usage.constraints.find((c) => c.key === k)?.percent ?? 0;
+  const weekly = pct('sd'), fiveHour = pct('fh');
+
+  if (priority === 'critical') return { ok: true };
+  if (weekly >= b.pauseAllAbove) return { ok: false, why: `weekly window at ${weekly}%` };
+  if (priority !== 'low' && weekly >= b.pauseNormalAbove) return { ok: false, why: `weekly window at ${weekly}%` };
+  if (priority === 'low' && weekly >= b.pauseLowAbove) return { ok: false, why: `low priority, weekly at ${weekly}%` };
+  if (b.deferWhenBusy && fiveHour >= b.busyThreshold) {
+    return { ok: false, why: `you are working — 5-hour window at ${fiveHour}%` };
+  }
+  return { ok: true };
+}
+
+/** Why the scheduler last held something back, for the console to show. */
+let deferrals = [];
+export const recentDeferrals = () => deferrals.slice(0, 12);
+
+// ---------------------------------------------------------------- events
+// A run can hand work to another project by ending a line with
+//   EMIT: <event> <one line of context>
+// Projects that subscribe to that event get a run queued with the context.
+const EMIT_RE = /^\s*EMIT:\s*([a-z0-9._-]+)\s*(.*)$/gim;
+const NOTE_RE = /^\s*NOTE:\s*(.+)$/gim;
+
+export function readEvents() {
+  try {
+    return fs.readFileSync(EVENTS, 'utf8').split('\n').filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  } catch { return []; }
+}
+function appendEvent(e) {
+  fs.mkdirSync(path.dirname(EVENTS), { recursive: true });
+  fs.appendFileSync(EVENTS, `${JSON.stringify(e)}\n`);
+}
+function markConsumed(ids) {
+  const all = readEvents().map((e) => (ids.includes(e.id) ? { ...e, consumed: true } : e));
+  fs.writeFileSync(EVENTS, all.map((e) => JSON.stringify(e)).join('\n') + (all.length ? '\n' : ''));
+}
+
+// ------------------------------------------------------------ project notes
+// Durable state that outlives a context window. Injected into every run, and
+// the agent appends to it with `NOTE: ...` lines.
+const notesFile = (projectId) => path.join(NOTES_DIR, `${projectId}.md`);
+export function readNotes(projectId) {
+  try { return fs.readFileSync(notesFile(projectId), 'utf8'); } catch { return ''; }
+}
+export function appendNotes(projectId, lines) {
+  if (!lines.length) return;
+  fs.mkdirSync(NOTES_DIR, { recursive: true });
+  const stamp = new Date().toISOString().slice(0, 10);
+  fs.appendFileSync(notesFile(projectId), lines.map((l) => `- ${stamp} ${l}`).join('\n') + '\n');
+}
 
 export function runTask({ project, task, trigger = 'schedule' }) {
   const settings = getSettings();
@@ -130,11 +228,17 @@ export function runTask({ project, task, trigger = 'schedule' }) {
   const sessionId = crypto.randomUUID();
   const startedAt = Date.now();
 
+  // Anything that may write gets a checkpoint first, so the morning review has
+  // something to diff against and something to restore.
+  const mayWrite = project.autonomy === 'edit';
+  const checkpoint = mayWrite ? snapshot(project) : null;
+
   const record = {
     runId, sessionId, trigger,
     projectId: project.id, projectPath: project.path,
     taskId: task.id || null, taskTitle: task.title || 'Ad-hoc run',
     prompt: task.prompt, autonomy: project.autonomy, harness: harness.id,
+    checkpoint, changes: null, protected: mayWrite ? checkpoint.kind === 'git' : null,
     startedAt, state: 'running',
     endedAt: null, ok: null, summary: null, question: null,
     costUsd: null, turns: null, error: null
@@ -143,7 +247,7 @@ export function runTask({ project, task, trigger = 'schedule' }) {
   writeJSON(runFile(project.id, runId), record);
 
   const args = harness.headlessArgs({
-    prompt: PREAMBLE + task.prompt,
+    prompt: preambleFor(project) + task.prompt,
     sessionId,
     autonomy: project.autonomy,
     model: project.model
@@ -186,7 +290,25 @@ export function runTask({ project, task, trigger = 'schedule' }) {
       record.tokens = parsed?.tokens ?? null;
       record.error = extra.error || (failed ? (resultText || err || 'run failed').slice(0, 600) : null);
       record.denials = parsed?.denials || 0;
+      if (checkpoint) {
+        try { record.changes = diffSince(project, checkpoint); }
+        catch (e) { record.changes = { kind: 'error', files: [], reason: e.message }; }
+      }
       writeJSON(runFile(project.id, runId), record);
+
+      // durable notes and cross-project handoffs
+      const text = String(resultText || '');
+      const notes = [...text.matchAll(NOTE_RE)].map((m) => m[1].trim()).filter(Boolean);
+      if (notes.length) { appendNotes(project.id, notes); record.notes = notes; }
+
+      const emits = [...text.matchAll(EMIT_RE)].map((m) => ({ event: m[1], context: (m[2] || '').trim() }));
+      record.emits = emits;
+      for (const e of emits) {
+        appendEvent({
+          id: crypto.randomUUID(), at: Date.now(), event: e.event, context: e.context,
+          fromProject: project.id, fromName: project.name, runId, consumed: false
+        });
+      }
 
       if (record.question) {
         const asks = loadAsks();
@@ -213,12 +335,45 @@ export function runTask({ project, task, trigger = 'schedule' }) {
   return { runId, sessionId, done };
 }
 
+export function loadRun(projectId, runId) {
+  return readJSON(runFile(projectId, runId), null);
+}
+
+/** Where a run's edits stand now: kept, reverted, superseded, or a mix. */
+export function runVerdict(project, run) {
+  if (!run?.changes?.files?.length) return null;
+  try { return verdict(project, run.changes); } catch { return null; }
+}
+
+/** Undo a run's edits, refusing any file touched since it finished. */
+export function revertRun(project, runId) {
+  const run = loadRun(project.id, runId);
+  if (!run) throw new Error('no such run');
+  if (!run.changes?.files?.length) throw new Error('this run changed nothing');
+  const result = revertFiles(project, run.changes);
+  run.reviewed = { at: Date.now(), action: 'reverted', ...result };
+  writeJSON(runFile(project.id, runId), run);
+  return result;
+}
+
+/** Mark a run's edits as accepted, so it drops out of the review queue. */
+export function keepRun(project, runId) {
+  const run = loadRun(project.id, runId);
+  if (!run) throw new Error('no such run');
+  run.reviewed = { at: Date.now(), action: 'kept' };
+  writeJSON(runFile(project.id, runId), run);
+  return run.reviewed;
+}
+
 /** One scheduler beat. Returns the runs it started. */
 export function tick(now = new Date()) {
   const settings = getSettings();
   if (!settings.autonomyEnabled) return [];
 
   const started = [];
+  const usage = readUsage();
+  deferrals = [];
+
   // Never start an unattended run in a folder someone is actively working in —
   // two agents editing the same tree is how you lose work.
   const busy = new Set();
@@ -241,10 +396,48 @@ export function tick(now = new Date()) {
       if (!cronMatches(task.schedule, now)) continue;
       if (active.size >= settings.maxConcurrentRuns) return started;
 
+      // spend the plan deliberately rather than firing blind
+      const gate = budgetGate(task.priority, usage, settings);
+      if (!gate.ok) {
+        deferrals.push({ project: project.name, task: task.title, why: gate.why, at: Date.now() });
+        continue;   // no lastFiredKey, so it retries on the next matching minute
+      }
+
       task.lastFiredKey = minuteKey;
       upsertProject({ id: project.id, agenda: project.agenda });
       started.push(runTask({ project, task, trigger: 'schedule' }));
     }
   }
+  // cross-project handoffs: an unconsumed event fires the projects listening for it
+  const pending = readEvents().filter((e) => !e.consumed);
+  if (pending.length) {
+    const consumed = [];
+    for (const project of loadProjects()) {
+      if (project.archived || project.autonomy === 'off') continue;
+      if (busy.has(path.resolve(project.path))) continue;
+      const subs = project.subscribes || [];
+      if (!subs.length) continue;
+
+      for (const e of pending) {
+        if (e.fromProject === project.id || !subs.includes(e.event)) continue;
+        if (active.size >= settings.maxConcurrentRuns) return started;
+        const gate = budgetGate('normal', usage, settings);
+        if (!gate.ok) { deferrals.push({ project: project.name, task: `on ${e.event}`, why: gate.why, at: Date.now() }); continue; }
+
+        started.push(runTask({
+          project,
+          task: {
+            id: null,
+            title: `On ${e.event}`,
+            prompt: `Another project raised an event you subscribe to.\n\nEvent: ${e.event}\nFrom: ${e.fromName}\nContext: ${e.context}\n\nDo whatever this project should do in response. If nothing is warranted, say so in one line.`
+          },
+          trigger: 'event'
+        }));
+        consumed.push(e.id);
+      }
+    }
+    if (consumed.length) markConsumed(consumed);
+  }
+
   return started;
 }

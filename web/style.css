@@ -89,7 +89,13 @@ kbd{font-family:var(--mono);font-size:10px;color:var(--ink-4)}
 .count:hover .k{color:var(--ink-2)}
 .count[aria-pressed=true] .k{color:var(--ink)}
 .count[aria-pressed=true]::after{content:"";position:absolute;left:0;bottom:-8px;width:18px;height:1px;background:var(--ink)}
-.count .mark{position:absolute;inset:-14px -18px auto auto;width:64px;height:44px;pointer-events:none}
+.count .mark{display:none}
+
+/* every section opens the same way: a small mark, then the label */
+.sechead{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap}
+.secmark{width:46px;height:22px;flex:none;opacity:.9;pointer-events:none}
+.sechead .lbl{flex:none}
+.sechead .spacer{flex:1}
 
 /* ------------------------------------------------------------------- usage */
 .usage{display:flex;flex-wrap:wrap;gap:var(--s6);padding-bottom:var(--s5);
@@ -106,7 +112,7 @@ kbd{font-family:var(--mono);font-size:10px;color:var(--ink-4)}
 
 /* ------------------------------------------------------------------ roster */
 .roster{padding-block:var(--s5) 0}
-.roster-head{display:flex;align-items:center;gap:var(--s4);margin-bottom:var(--s4);flex-wrap:wrap}
+
 .filter{flex:1;min-width:160px;max-width:280px;background:transparent;border:none;
   border-bottom:1px solid var(--line);padding:5px 0;color:var(--ink);font:inherit;font-size:12.5px}
 .filter:focus{outline:none;border-bottom-color:var(--ink-2)}
@@ -155,7 +161,7 @@ kbd{font-family:var(--mono);font-size:10px;color:var(--ink-4)}
 .panel{position:relative}
 .panel h3{margin:0 0 var(--s4);font-size:9.5px;letter-spacing:.19em;text-transform:uppercase;
   color:var(--ink-3);font-weight:500}
-.panel .mark{position:absolute;inset:auto -10px -6px auto;width:78px;height:38px;pointer-events:none}
+
 .bars{display:flex;align-items:flex-end;gap:3px;height:48px}
 .bars i{flex:1;background:var(--line-2);min-height:2px;transition:background .13s}
 .bars i.on{background:var(--ink-2)}
@@ -237,7 +243,6 @@ dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
   .tr{grid-template-columns:12px minmax(120px,1.6fr) 92px 88px 118px}
   .tr .c-sessions,.thead .c-sessions,.tr .c-when,.thead .c-when{display:none}
   .tr .acts{opacity:1}
-  .count .mark{display:none}
 }
 @media (max-width:620px){
   .tr{grid-template-columns:12px 1fr auto;gap:var(--s2);padding:11px 0}
@@ -255,3 +260,55 @@ dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
   .foot{flex-direction:column;gap:var(--s2)}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------------------------------------------------------------- schedule
+   The next week of unattended work on one axis, so you can see the shape of
+   the fleet's day before it happens. */
+.sched{padding-block:var(--s6) 0}
+.sched-grid{position:relative;margin-top:var(--s2)}
+.sched-days{display:grid;position:relative;height:16px}
+.sched-days span{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-4);padding-left:5px;
+  border-left:1px solid var(--line)}
+.sched-row{display:grid;grid-template-columns:minmax(96px,140px) 1fr;gap:var(--s3);
+  align-items:center;padding:7px 0}
+.sched-name{font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sched-track{position:relative;height:20px}
+.sched-track::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:var(--line)}
+.sched-cols{position:absolute;inset:0;display:grid;pointer-events:none}
+.sched-cols i{border-left:1px solid var(--line)}
+.tick{position:absolute;top:50%;transform:translate(-50%,-50%);width:7px;height:7px;
+  border-radius:50%;background:var(--ink-3);cursor:default;transition:background .12s,transform .12s}
+.tick:hover{background:var(--ink);transform:translate(-50%,-50%) scale(1.35)}
+.now{position:absolute;top:-4px;bottom:-4px;width:1px;background:var(--ink-2)}
+.now::after{content:"NOW";position:absolute;bottom:-12px;left:3px;font-family:var(--mono);
+  font-size:8px;letter-spacing:.14em;color:var(--ink-2)}
+.sched-row:not(:first-of-type) .now::after{content:""}
+.sched-empty{font-size:12.5px;color:var(--ink-3);padding:var(--s3) 0}
+@media (max-width:620px){
+  .sched-row{grid-template-columns:1fr;gap:2px}
+  .sched-days span{font-size:8.5px}
+}
+
+/* ------------------------------------------------------------------ review
+   Unattended edits, waiting on a yes or a no. This is what makes turning on
+   edit autonomy reasonable: nothing an agent writes is final until you say so. */
+.review{padding-block:var(--s5) 0}
+.rev{display:grid;grid-template-columns:minmax(140px,1fr) 2fr auto;gap:var(--s4);
+  align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}
+.rev .who b{display:block;font-weight:500;font-size:13.5px}
+.rev .who span{font-family:var(--mono);font-size:10.5px;color:var(--ink-4)}
+.rev .files{display:flex;flex-wrap:wrap;gap:6px}
+.rev .f{font-family:var(--mono);font-size:11px;color:var(--ink-2);
+  border:1px solid var(--line);border-radius:4px;padding:2px 7px;white-space:nowrap}
+.rev .f i{font-style:normal;color:var(--ink-4);margin-left:5px}
+.rev .f i.add{color:var(--ok,#3fb950)}
+.rev .go{display:flex;gap:var(--s1);justify-content:flex-end}
+.rev .stale{font-family:var(--mono);font-size:10px;color:var(--ink-4)}
+@media (max-width:760px){
+  .rev{grid-template-columns:1fr;gap:var(--s2)}
+  .rev .go{justify-content:flex-start}
+  .rev .go .btn{flex:1;justify-content:center}
+}
+.defer{font-family:var(--mono);font-size:10.5px;color:var(--ink-4);
+  padding-top:var(--s3);display:flex;flex-direction:column;gap:3px}

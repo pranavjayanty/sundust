@@ -13,6 +13,8 @@ export const INDEX_CACHE = path.join(SUNDUST_DIR, 'index.json');
 export const RUNS_DIR = path.join(SUNDUST_DIR, 'runs');
 export const ASKS = path.join(SUNDUST_DIR, 'asks.json');
 export const SETTINGS = path.join(SUNDUST_DIR, 'settings.json');
+export const EVENTS = path.join(SUNDUST_DIR, 'events.jsonl');
+export const NOTES_DIR = path.join(SUNDUST_DIR, 'notes');
 
 export const DEFAULT_SETTINGS = {
   port: 4173,
@@ -28,11 +30,23 @@ export const DEFAULT_SETTINGS = {
   // Max concurrent headless runs.
   maxConcurrentRuns: 2,
   // Per-run wall clock cap.
-  runTimeoutMs: 20 * 60 * 1000
+  runTimeoutMs: 20 * 60 * 1000,
+  // Spend the plan deliberately. Percentages are of the weekly window except
+  // busyThreshold, which reads the 5-hour window.
+  budget: {
+    enabled: true,
+    pauseLowAbove: 50,       // low-priority tasks stop here
+    pauseNormalAbove: 78,    // ordinary tasks stop here
+    pauseAllAbove: 93,       // only critical tasks run above this
+    deferWhenBusy: true,     // back-pressure: your own session comes first
+    busyThreshold: 40        // 5-hour percentage that counts as "you are working"
+  }
 };
 
+
+
 export function ensureDirs() {
-  for (const d of [SUNDUST_DIR, RUNS_DIR]) fs.mkdirSync(d, { recursive: true });
+  for (const d of [SUNDUST_DIR, RUNS_DIR, NOTES_DIR]) fs.mkdirSync(d, { recursive: true });
 }
 
 export function readJSON(file, fallback) {

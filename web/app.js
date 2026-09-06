@@ -96,7 +96,134 @@ const pendingFor = (id) => pendingItems().filter((x) => x.projectId === id);
 function render() {
   const s = STATE; if (!s) return;
   renderWarn(s); renderCounts(s); renderUsage(s);
-  renderRoster(s); renderPanels(s); renderAdoptable(s); renderFoot(s);
+  renderReview(s); renderRoster(s); renderSchedule(s); renderPanels(s); renderAdoptable(s); renderFoot(s);
+  bindMarks();
+}
+
+/* ----------------------------------------------------------------- review */
+function renderReview(s) {
+  const host = $('#review'); const sec = $('#review-sec');
+  host.innerHTML = '';
+  const items = s.review || [];
+  sec.hidden = items.length === 0;
+  $('#review-count').textContent = items.length ? `${items.length} pending` : '';
+  if (!items.length) return;
+
+  for (const r of items) {
+    const row = el('div', 'rev');
+    const who = el('div', 'who');
+    who.append(el('b', null, r.project));
+    who.append(el('span', null, `${r.task} · ${ago(r.at)} ago`));
+    row.append(who);
+
+    const files = el('div', 'files');
+    for (const f of r.files.slice(0, 8)) {
+      const chip = el('span', 'f', f.path);
+      if (f.insertions != null) {
+        const add = el('i', 'add', `+${f.insertions}`);
+        const del = el('i', null, `−${f.deletions}`);
+        chip.append(add, del);
+      }
+      files.append(chip);
+    }
+    if (r.files.length > 8) files.append(el('span', 'f', `+${r.files.length - 8} more`));
+    if (r.verdict && r.verdict.superseded) {
+      files.append(el('span', 'stale', `${r.verdict.superseded} changed since`));
+    }
+    row.append(files);
+
+    const go = el('div', 'go');
+    const keep = el('button', 'btn solid', 'Keep');
+    keep.onclick = async () => {
+      try { await post('/api/review', { projectId: r.projectId, runId: r.runId, action: 'keep' }); refresh(); }
+      catch (e) { toast(e.message, true); }
+    };
+    const undo = el('button', 'btn', 'Revert');
+    undo.title = 'Restore these files to their state before the run. Anything you edited since is left alone.';
+    undo.onclick = async () => {
+      try {
+        const out = await post('/api/review', { projectId: r.projectId, runId: r.runId, action: 'revert' });
+        toast(out.skipped?.length
+          ? `reverted ${out.reverted.length}, skipped ${out.skipped.length} you had edited`
+          : `reverted ${out.reverted.length} file${out.reverted.length === 1 ? '' : 's'}`);
+        refresh();
+      } catch (e) { toast(e.message, true); }
+    };
+    const open = el('button', 'btn', 'Open');
+    open.onclick = () => {
+      const p = STATE.projects.find((x) => x.id === r.projectId);
+      openLink(p?.links.reveal);
+    };
+    go.append(keep, undo, open);
+    row.append(go);
+    host.append(row);
+  }
+}
+
+/* --------------------------------------------------------------- schedule */
+const DAY = 86400000;
+function renderSchedule(s) {
+  const host = $('#sched'); host.innerHTML = '';
+  const events = s.upcoming || [];
+  $('#sched-count').textContent = events.length ? `${events.length} runs` : '';
+
+  if (!events.length) {
+    host.append(el('div', 'sched-empty',
+      'Nothing scheduled. Give a project an agenda task and it will run on its own.'));
+    return;
+  }
+
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const days = 7, from = start.getTime(), span = days * DAY;
+  const pct = (t) => ((t - from) / span) * 100;
+
+  const grid = el('div', 'sched-grid');
+  const cols = `repeat(${days},1fr)`;
+
+  const axis = el('div', 'sched-days');
+  axis.style.gridTemplateColumns = cols;
+  axis.style.marginLeft = 'calc(min(140px,max(96px,20%)) + var(--s3))';
+  for (let i = 0; i < days; i++) {
+    const d = new Date(from + i * DAY);
+    axis.append(el('span', null, i === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short' })));
+  }
+  grid.append(axis);
+
+  // one row per project so the fleet's shape is readable at a glance
+  const byProject = new Map();
+  for (const e of events) {
+    if (!byProject.has(e.project)) byProject.set(e.project, []);
+    byProject.get(e.project).push(e);
+  }
+  for (const [name, list] of byProject) {
+    const row = el('div', 'sched-row');
+    row.append(el('div', 'sched-name', name));
+    const track = el('div', 'sched-track');
+    const lines = el('div', 'sched-cols');
+    lines.style.gridTemplateColumns = cols;
+    for (let i = 0; i < days; i++) lines.append(el('i'));
+    track.append(lines);
+    for (const e of list) {
+      const t = el('i', 'tick');
+      t.style.left = `${Math.max(0, Math.min(100, pct(e.at)))}%`;
+      t.title = `${e.task} — ${new Date(e.at).toLocaleString()} (${e.human})`;
+      track.append(t);
+    }
+    const now = el('div', 'now');
+    now.style.left = `${pct(Date.now())}%`;
+    track.append(now);
+    row.append(track);
+    grid.append(row);
+  }
+  host.append(grid);
+
+  if (s.deferrals?.length) {
+    const d = el('div', 'defer');
+    for (const x of s.deferrals.slice(0, 4)) {
+      d.append(el('span', null, `held back: ${x.project} · ${x.task} — ${x.why}`));
+    }
+    host.append(d);
+  }
 }
 
 function renderWarn(s) {
@@ -107,16 +234,32 @@ function renderWarn(s) {
   host.append(w);
 }
 
+const MARKS = {
+  dots: (c) => attachDots(c, { gap: 7, pull: 6, radius: 110 }),
+  rings: (c) => attachRings(c, { count: 7, pull: 9, radius: 120 }),
+  hatch: (c) => attachHatch(c, { gap: 5, pull: 8, radius: 110 })
+};
+/** Bind any section mark that has not been wired yet. */
+function bindMarks(root = document) {
+  for (const c of root.querySelectorAll('canvas.secmark')) {
+    if (attached.has(c)) continue;
+    attached.add(c);
+    (MARKS[c.dataset.mark] || MARKS.dots)(c);
+  }
+}
+function sectionHead(label, markKind, extra) {
+  const h = el('div', 'sechead');
+  const c = document.createElement('canvas');
+  c.className = 'secmark'; c.dataset.mark = markKind;
+  h.append(c, el('span', 'lbl', label));
+  if (extra) h.append(extra);
+  return h;
+}
+
 function countBtn(label, value, key, opts = {}) {
   const b = el('button', `count${value > 0 ? ' on' : ''}${opts.bad ? ' bad' : ''}`);
   b.setAttribute('aria-pressed', String(countFilter === key));
   b.append(el('div', 'v', String(value)), el('div', 'k', label));
-  if (opts.mark) {
-    const c = document.createElement('canvas');
-    c.className = 'mark';
-    b.append(c);
-    if (!attached.has(c)) { attached.add(c); opts.mark(c); }
-  }
   b.onclick = () => {
     countFilter = countFilter === key ? null : key;
     render();
@@ -129,13 +272,15 @@ function renderCounts(s) {
   const host = $('#counts'); host.innerHTML = '';
   const by = (id) => s.projects.filter((p) => p.state === id).length;
   const pending = pendingItems().length;
+  const live = s.projects.filter((p) => p.state !== 'archived').length;
   host.append(
-    countBtn('Needs you', pending, 'attention', { mark: (c) => attachDots(c, { gap: 9, pull: 7, radius: 110 }) }),
+    countBtn('Blocked', pending, 'blocked'),
     countBtn('Running', by('running') + s.activeRuns, 'running'),
     countBtn('Scheduled', by('scheduled'), 'scheduled'),
-    countBtn('Failed', by('failed'), 'failed', { bad: true }),
-    countBtn('Projects', s.projects.length, null, { mark: (c) => attachRings(c, { count: 9, pull: 11, radius: 130 }) })
+    countBtn('Projects', live, null)
   );
+  const arch = by('archived');
+  if (arch) host.append(countBtn('Archived', arch, 'archived'));
 }
 
 function renderUsage(s) {
@@ -258,6 +403,11 @@ function rosterRow(p, s) {
   const st = el('span', `cell c-state${p.state === 'attention' ? ' strong' : ''}`, p.stateLabel);
   st.title = s.states.find((x) => x.id === p.state)?.detail || '';
   row.append(st);
+  if (p.autonomy === 'edit' && !p.isRepo) {
+    st.textContent = `${p.stateLabel} · unprotected`;
+    st.title = 'Edit autonomy without git: Sundust cannot checkpoint or revert what a run changes here.';
+    st.classList.add('strong');
+  }
   row.append(el('span', 'cell c-sessions dim', p.sessionCount ? String(p.sessionCount) : '—'));
   row.append(el('span', 'cell c-when dim', `${ago(p.lastActivity)} ago`));
   row.append(el('span', `cell c-next${p.nextAt ? '' : ' dim'}`,
@@ -294,7 +444,7 @@ function renderPanels(s) {
   }
   const max = Math.max(1, ...buckets);
   const act = el('div', 'panel');
-  act.append(el('h3', null, 'Activity · 14 days'));
+  act.append(sectionHead('Activity · 14 days', 'rings'));
   const bars = el('div', 'bars');
   buckets.forEach((v, i) => {
     const b = el('i');
@@ -310,7 +460,7 @@ function renderPanels(s) {
   host.append(act);
 
   const fleet = el('div', 'panel');
-  fleet.append(el('h3', null, 'Fleet'));
+  fleet.append(sectionHead('Fleet', 'dots'));
   const kv = el('div', 'kv');
   const auto = { off: 0, read: 0, edit: 0 };
   for (const p of s.projects) auto[p.autonomy] = (auto[p.autonomy] || 0) + 1;
@@ -326,14 +476,11 @@ function renderPanels(s) {
   }
   if (s.totals.costUsd > 0) kv.append(line('Unattended spend', money(s.totals.costUsd)));
   fleet.append(kv);
-  const fm = document.createElement('canvas'); fm.className = 'mark';
-  fleet.append(fm);
-  if (!attached.has(fm)) { attached.add(fm); attachHatch(fm, { gap: 6, pull: 10, radius: 120 }); }
   host.append(fleet);
 
   const runs = (s.runs || []).slice(0, 6);
   const log = el('div', 'panel');
-  log.append(el('h3', null, 'Recent runs'));
+  log.append(sectionHead('Recent runs', 'hatch'));
   const kv2 = el('div', 'kv');
   if (!runs.length) kv2.append(line('No unattended runs yet', '', 'dim'));
   for (const r of runs) {
@@ -350,7 +497,7 @@ function renderPanels(s) {
 function renderAdoptable(s) {
   const host = $('#adoptable'); host.innerHTML = '';
   if (!s.candidates.length) return;
-  host.append(el('div', 'lbl', 'Untracked folders with sessions'));
+  host.append(sectionHead('Untracked folders with sessions', 'hatch'));
   const box = el('div'); box.style.marginTop = 'var(--s3)';
   for (const c of s.candidates.slice(0, 5)) {
     const row = el('div', 'adopt-row');
