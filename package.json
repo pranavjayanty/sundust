@@ -1,0 +1,14 @@
+{
+  "name": "orrery",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first mission control for your Claude Code projects.",
+  "type": "module",
+  "bin": { "orrery": "./bin/orrery.js" },
+  "scripts": {
+    "start": "node bin/orrery.js up",
+    "serve": "node bin/orrery.js serve",
+    "daemon": "node bin/orrery.js daemon"
+  },
+  "engines": { "node": ">=20" }
+}

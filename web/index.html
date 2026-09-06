@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orrery</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='12' fill='%23ffd79a'/><ellipse cx='50' cy='50' rx='40' ry='14' fill='none' stroke='%236f7fd4' stroke-width='3'/></svg>">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="bar">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 44 44" aria-hidden="true">
+      <ellipse cx="22" cy="22" rx="19" ry="7" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+      <ellipse cx="22" cy="22" rx="19" ry="7" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".35" transform="rotate(60 22 22)"/>
+      <ellipse cx="22" cy="22" rx="19" ry="7" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".35" transform="rotate(-60 22 22)"/>
+      <circle cx="22" cy="22" r="4.5" fill="currentColor"/>
+    </svg>
+    <div>
+      <h1>Orrery</h1>
+      <p id="tagline">reading your projects…</p>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="bar-actions">
+    <button class="btn attention" id="btn-attention" hidden></button>
+    <button class="btn" id="btn-palette"><kbd>⌘K</kbd> Command</button>
+    <button class="btn primary" id="btn-new">＋ New project</button>
+  </div>
+</header>
+
+<main>
+  <div id="warn"></div>
+
+  <section class="sky" id="sky">
+    <canvas id="orbit"></canvas>
+    <div class="sky-legend">
+      <span><i class="d blocked"></i>needs a decision</span>
+      <span><i class="d waiting"></i>waiting on you</span>
+      <span><i class="d working"></i>working</span>
+      <span><i class="d idle"></i>idle</span>
+      <span class="hint">distance from centre = time since last activity</span>
+    </div>
+    <div class="tip" id="tip" hidden></div>
+  </section>
+
+  <section class="asks" id="asks"></section>
+  <section class="deck" id="deck"></section>
+  <section class="adoptable" id="adoptable"></section>
+  <footer class="foot" id="foot"></footer>
+</main>
+
+<div class="scrim" id="scrim" hidden></div>
+
+<!-- new project -->
+<dialog class="sheet" id="dlg-new">
+  <h2>New project</h2>
+  <p class="sub">Scaffolds the folder, writes a CLAUDE.md the agent can work from, loads its agenda, then opens Claude with a starter prompt.</p>
+  <label class="field"><span>Name</span><input id="new-name" placeholder="Cooking notebook" autocomplete="off"></label>
+  <div class="tpl" id="new-templates"></div>
+  <label class="field"><span>Autonomy</span>
+    <select id="new-autonomy">
+      <option value="read" selected>read — scheduled runs may look and report, never edit</option>
+      <option value="edit">edit — scheduled runs may change files in this project</option>
+      <option value="off">off — nothing runs unattended</option>
+    </select>
+  </label>
+  <p class="path-preview" id="new-path"></p>
+  <div class="row end">
+    <button class="btn" data-close>Cancel</button>
+    <button class="btn primary" id="new-create">Create &amp; open Claude</button>
+  </div>
+</dialog>
+
+<!-- command palette -->
+<dialog class="palette" id="dlg-palette">
+  <input id="pal-input" placeholder="Jump to a session, run a task, start something new…" autocomplete="off">
+  <div class="pal-list" id="pal-list"></div>
+</dialog>
+
+<!-- ad-hoc run -->
+<dialog class="sheet" id="dlg-run">
+  <h2>Run now</h2>
+  <p class="sub" id="run-sub"></p>
+  <label class="field"><span>What should it do?</span><textarea id="run-prompt" rows="5" placeholder="Check for anything new and summarise what changed."></textarea></label>
+  <div class="row end">
+    <button class="btn" data-close>Cancel</button>
+    <button class="btn primary" id="run-go">Run headless</button>
+  </div>
+</dialog>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
