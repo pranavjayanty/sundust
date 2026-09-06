@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { REGISTRY, HOME, readJSON, writeJSON, getSettings } from './config.js';
 import { TEMPLATES } from './templates.js';
+import { DEFAULT_HARNESS } from './harnesses.js';
 
 const CLAUDE_SCRATCH = path.join(HOME, 'Library', 'Application Support', 'Claude', 'scratch-workspaces');
 
@@ -39,13 +40,14 @@ function pick(list, seed) {
   return list[h % list.length];
 }
 
-export function makeProject({ name, dir, template = 'blank', autonomy = 'read', emoji, accent }) {
+export function makeProject({ name, dir, template = 'blank', autonomy = 'read', harness = DEFAULT_HARNESS, emoji, accent }) {
   const t = TEMPLATES[template] || TEMPLATES.blank;
   return {
     id: crypto.randomUUID(),
     name,
     path: dir,
     template,
+    harness,
     emoji: emoji || t.emoji || pick(GLYPHS, dir),
     accent: accent || t.accent || pick(PALETTE, dir),
     // off  — never run unattended
@@ -60,7 +62,7 @@ export function makeProject({ name, dir, template = 'blank', autonomy = 'read', 
 }
 
 /** Scaffold a new project folder, register it, and hand back a seed prompt. */
-export function scaffold({ name, template = 'blank', autonomy = 'read', root }) {
+export function scaffold({ name, template = 'blank', autonomy = 'read', harness = DEFAULT_HARNESS, root }) {
   const t = TEMPLATES[template] || TEMPLATES.blank;
   const settings = getSettings();
   const base = root || settings.workspaceRoot;
@@ -80,7 +82,7 @@ export function scaffold({ name, template = 'blank', autonomy = 'read', root }) 
   write('NOTES.md', `# ${name}\n\nRunning log. Newest first.\n`);
   write('.gitignore', 'node_modules/\n.DS_Store\n.env\n');
 
-  const project = makeProject({ name, dir, template, autonomy });
+  const project = makeProject({ name, dir, template, autonomy, harness });
   upsertProject(project);
   return { project, seed: t.seed(name) };
 }
@@ -89,7 +91,7 @@ const isScratch = (p) => !p || p.startsWith(CLAUDE_SCRATCH) || p.includes('/scra
 
 /**
  * Folders that have Claude sessions but no project record yet — offered in the
- * UI as one-click adopts, so an existing repo joins Orrery without any setup.
+ * UI as one-click adopts, so an existing repo joins Sundust without any setup.
  */
 export function discoverCandidates(sessions) {
   const known = new Set(
@@ -126,9 +128,9 @@ export function relocate(id, newPath) {
   return p;
 }
 
-export function adopt({ dir, name, template = 'blank', autonomy = 'read' }) {
+export function adopt({ dir, name, template = 'blank', autonomy = 'read', harness = DEFAULT_HARNESS }) {
   if (!fs.existsSync(dir)) throw new Error(`${dir} does not exist`);
-  const project = makeProject({ name: name || path.basename(dir), dir, template, autonomy });
+  const project = makeProject({ name: name || path.basename(dir), dir, template, autonomy, harness });
   upsertProject(project);
   return project;
 }

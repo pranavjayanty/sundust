@@ -18,7 +18,7 @@ function frontmatter(text) {
 
 /**
  * Claude Code's own scheduled tasks. These run inside the desktop app rather
- * than through Orrery's daemon, so we read them but never fire them.
+ * than through Sundust's daemon, so we read them but never fire them.
  */
 export function claudeScheduledTasks() {
   let dirs = [];

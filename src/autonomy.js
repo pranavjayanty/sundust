@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { RUNS_DIR, ASKS, getSettings, readJSON, writeJSON } from './config.js';
 import { loadProjects, upsertProject } from './projects.js';
 import { scanSessions } from './scan.js';
+import { getHarness, DEFAULT_HARNESS } from './harnesses.js';
 
 // ---------------------------------------------------------------- cron
 
@@ -93,14 +94,6 @@ export function recentRuns(limit = 40) {
     .slice(0, limit);
 }
 
-/** Permission posture per autonomy level. Deliberately conservative. */
-function permissionArgs(project) {
-  if (project.permissionArgs) return project.permissionArgs;
-  if (project.autonomy === 'edit') return ['--permission-mode', 'acceptEdits'];
-  // 'read': may look around and report, may not mutate anything.
-  return ['--permission-mode', 'dontAsk', '--disallowedTools', 'Write', 'Edit', 'NotebookEdit', 'Bash'];
-}
-
 const PREAMBLE = `You are running unattended, on a schedule, with no human watching.
 
 Do everything you can do without a human. Do not ask clarifying questions mid-run.
@@ -120,6 +113,7 @@ export const activeRunCount = () => active.size;
 
 export function runTask({ project, task, trigger = 'schedule' }) {
   const settings = getSettings();
+  const harness = getHarness(project.harness || DEFAULT_HARNESS);
   const runId = crypto.randomUUID();
   const sessionId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -128,7 +122,7 @@ export function runTask({ project, task, trigger = 'schedule' }) {
     runId, sessionId, trigger,
     projectId: project.id, projectPath: project.path,
     taskId: task.id || null, taskTitle: task.title || 'Ad-hoc run',
-    prompt: task.prompt, autonomy: project.autonomy,
+    prompt: task.prompt, autonomy: project.autonomy, harness: harness.id,
     startedAt, state: 'running',
     endedAt: null, ok: null, summary: null, question: null,
     costUsd: null, turns: null, error: null
@@ -136,18 +130,18 @@ export function runTask({ project, task, trigger = 'schedule' }) {
   fs.mkdirSync(path.dirname(runFile(project.id, runId)), { recursive: true });
   writeJSON(runFile(project.id, runId), record);
 
-  const args = [
-    '-p', PREAMBLE + task.prompt,
-    '--session-id', sessionId,
-    '--output-format', 'json',
-    ...permissionArgs(project)
-  ];
-  if (project.model) args.push('--model', project.model);
+  const args = harness.headlessArgs({
+    prompt: PREAMBLE + task.prompt,
+    sessionId,
+    autonomy: project.autonomy,
+    model: project.model
+  });
+  const bin = project.bin || settings.bins?.[harness.id] || harness.bin;
 
   active.add(runId);
-  const child = spawn(settings.claudeBin, args, {
+  const child = spawn(bin, args, {
     cwd: project.path,
-    env: { ...process.env, ORRERY_RUN: '1' },
+    env: { ...process.env, SUNDUST_RUN: '1' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
@@ -158,7 +152,7 @@ export function runTask({ project, task, trigger = 'schedule' }) {
   const timer = setTimeout(() => { try { child.kill('SIGTERM'); } catch {} }, settings.runTimeoutMs);
 
   const done = new Promise((resolve) => {
-    child.on('error', (e) => finish({ error: `could not launch "${settings.claudeBin}": ${e.message}` }));
+    child.on('error', (e) => finish({ error: `could not launch "${bin}": ${e.message}` }));
     child.on('close', () => finish({}));
 
     function finish(extra) {
@@ -166,29 +160,20 @@ export function runTask({ project, task, trigger = 'schedule' }) {
       clearTimeout(timer);
       active.delete(runId);
 
-      let parsed = null;
-      try { parsed = JSON.parse(out); } catch { /* not json */ }
-
-      const resultText = parsed?.result ?? out.trim();
-      const failed = Boolean(extra.error) || parsed?.is_error === true || (!parsed && !out.trim());
+      const parsed = harness.parseResult(out);
+      const resultText = parsed?.text ?? out.trim();
+      const failed = Boolean(extra.error) || parsed?.ok === false || (!parsed && !out.trim());
 
       record.state = 'done';
       record.endedAt = Date.now();
       record.ok = !failed;
       record.summary = String(resultText || '').slice(0, 4000);
       record.question = extractQuestion(resultText);
-      record.costUsd = parsed?.total_cost_usd ?? null;
-      record.turns = parsed?.num_turns ?? null;
-      record.tokens = parsed?.usage
-        ? {
-            in: parsed.usage.input_tokens || 0,
-            out: parsed.usage.output_tokens || 0,
-            cacheRead: parsed.usage.cache_read_input_tokens || 0,
-            cacheCreate: parsed.usage.cache_creation_input_tokens || 0
-          }
-        : null;
+      record.costUsd = parsed?.costUsd ?? null;
+      record.turns = parsed?.turns ?? null;
+      record.tokens = parsed?.tokens ?? null;
       record.error = extra.error || (failed ? (resultText || err || 'run failed').slice(0, 600) : null);
-      record.denials = parsed?.permission_denials?.length || 0;
+      record.denials = parsed?.denials || 0;
       writeJSON(runFile(project.id, runId), record);
 
       if (record.question) {

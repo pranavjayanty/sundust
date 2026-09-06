@@ -1,43 +1,46 @@
-# Orrery
+# Sundust
 
-Mission control for your Claude Code projects. Local-first, no account, no cloud.
+Mission control for the projects you run with a coding agent. Local-first, no
+account, no cloud.
 
-Every project you run Claude in becomes a body in orbit. Distance from the centre
-is how long since it last moved, size is how much work has gone into it, and the
-colour tells you whether it is working, idle, or waiting on you. Click anything to
-land in the Claude session behind it.
+Every project is a star, and its stage is its state. Distance and colour are
+temperature — how recently it burned. A project that needs you **flares**, and
+you can see that from across the room.
 
 ```bash
-node bin/orrery.js up
+node bin/sundust.js up
 ```
 
-That serves the dashboard on `http://127.0.0.1:4173` and starts the scheduler.
+Serves the dashboard on `http://127.0.0.1:4173` and starts the scheduler.
 
-## Design
+## Stellar stages
 
-Two colours and one accent. Near-black and white carry the whole interface; a
-single vibrant amber is spent **only** on what needs a human. Status is otherwise
-read from luminance, form and motion — a filled dot is live, a hollow ring is
-idle, a pulsing halo wants you. Nothing competes with amber for attention, so
-"what needs me?" is answerable from across the room.
+The metaphor does real work. A star's colour is its temperature; here temperature
+is recency. Fresh work burns white-gold, cools to orange, and ends as dim ash.
 
-## Why this exists
+| Stage | Colour | Means |
+|---|---|---|
+| **Flare** | gold | Waiting on you — a run stopped on a question, or a live session is at the prompt |
+| **Supernova** | coral | The last unattended run failed |
+| **Main sequence** | amber | Burning steadily; live session or a run in flight |
+| **Protostar** | orange | Registered, nothing has run here yet |
+| **Red giant** | deep orange | Plenty of history, quiet for a while |
+| **White dwarf** | ash | Untouched for over a month |
 
-Claude Code already stores everything worth knowing in `~/.claude`. What it does
-not do is answer "what is the state of all my projects right now, and which one
-needs me?" Orrery reads that data, joins it to a project registry, and puts a
-door back into each session one click away.
+The field lays projects out like an HR diagram: horizontal is temperature
+(recency), vertical is luminosity (how much work is in it). Each is drawn as the
+star it currently is — protostars are diffuse and unignited, red giants swollen
+and cool, flares throw prominences off the limb.
 
 ## The three things it does
 
-**1. Sees everything.** It reads every transcript under
-`~/.claude/projects/*/*.jsonl` incrementally — it remembers the byte offset it
-stopped at, so a 65MB history costs ~200ms on first scan and almost nothing after.
-It cross-references `~/.claude/sessions/*.json` and checks the pids to know which
-sessions are actually alive right now.
+**1. Sees everything.** Reads every transcript your harness writes, incrementally
+— it remembers the byte offset it stopped at, so a 65MB history costs ~200ms on
+first scan and almost nothing after. It cross-references live process records to
+know which sessions are actually running right now.
 
-**2. Gets you back in, in one click.** The desktop app registers a `claude://`
-URL scheme. Orrery uses three routes from it:
+**2. Gets you back in, in one click.** Claude Code's desktop app registers a
+`claude://` URL scheme. Sundust uses three routes:
 
 | Link | Effect |
 |---|---|
@@ -45,24 +48,24 @@ URL scheme. Orrery uses three routes from it:
 | `claude://code/continue?session=local_<uuid>` | Jump straight into a specific session |
 | `claude://code/needs-input` | Jump to whatever is waiting on you |
 
-Session ids on disk are bare uuids; the app wants a `local_` prefix. The prompt is
-truncated at 14336 characters.
+Session ids on disk are bare uuids; the app wants a `local_` prefix. The prompt
+is truncated at 14336 characters.
 
 **3. Keeps projects moving without you.** Each project carries an *agenda* — cron
-tasks that run `claude -p` headless in that folder. Because a headless run writes a
-normal transcript, an autonomous run **is** a resumable session: when one gets
-stuck, you click through and keep talking to it with its full context intact.
+tasks that run headless in that folder. Because a headless run writes a normal
+transcript, an autonomous run **is** a resumable session: when one gets stuck you
+click through and keep talking to it with full context.
 
 ## The autonomy loop
 
-Every scaffolded project's `CLAUDE.md` teaches the agent one convention:
+Every scaffolded project's brief teaches the agent one convention:
 
 > Do everything you can do unattended. If a decision genuinely needs the human,
 > end your final message with `NEEDS INPUT: <one self-contained question>`.
 
-Orrery watches for that line, turns it into a card at the top of the dashboard,
-and gives you an **Answer in Claude** button that opens the exact run that asked.
-Autonomous until it depends on you, then one click to unblock it.
+Sundust watches for that line, turns it into a card at the top of the dashboard,
+and gives you an **Answer** button that opens the exact run that asked. The
+project flares until you deal with it.
 
 ### Autonomy levels
 
@@ -71,21 +74,63 @@ Set per project. New projects default to `read`.
 | Level | What a scheduled run may do |
 |---|---|
 | `off` | Nothing runs unattended |
-| `read` | Look around and report. `Write`, `Edit`, `NotebookEdit` and `Bash` are denied |
-| `edit` | Change files in the project (`--permission-mode acceptEdits`) |
+| `read` | Look around and report; writes and shell are denied |
+| `edit` | Change files in the project |
 
-Two further guards, both on by default: the scheduler **skips any project that has
-a live interactive session** (two agents in one tree is how you lose work), and
-`autonomyEnabled` in settings is a global kill switch.
+Two further guards, both on by default: the scheduler **skips any project with a
+live interactive session** (two agents in one tree is how you lose work), and
+`autonomyEnabled` is a global kill switch.
+
+## Harnesses
+
+Sundust is harness-agnostic in structure, and Claude Code is the default and the
+only one fully wired. Others carry enough plumbing to launch and schedule.
+
+| Harness | Support | What works |
+|---|---|---|
+| **Claude Code** (default) | `full` | Transcript indexing, live-session detection, deep links, headless runs, cost and token accounting |
+| Codex CLI | `launch-only` | Headless runs and scheduling. Sandbox modes map to autonomy levels |
+| Gemini CLI | `launch-only` | Headless runs and scheduling. `--yolo` maps to `edit` |
+| OpenCode | `launch-only` | Headless runs and scheduling |
+
+`launch-only` means Sundust can start and schedule work but does not yet parse
+that harness's transcripts, so its sessions will not appear on the star field and
+there is no deep link — the card falls back to revealing the folder. Adding one is
+a single entry in `src/harnesses.js`: a binary name, an argument builder, a result
+parser, and optionally a URL scheme.
+
+## Harness limits
+
+The dashboard carries a searchable table of context windows, output caps, plan
+tiers and rate-limit shapes across all four harnesses. It is also searchable from
+`⌘K` — type "weekly", "context", "free tier".
+
+Every row is labelled by confidence, because this matters: vendors publish context
+and output windows, but mostly **do not** publish the token counts behind
+subscription rate limits.
+
+- `official` — published by the vendor
+- `estimate` — community-reported, treat as a sense of scale
+- `unverified` — sources disagree; check before relying on it
+
+`src/limits.js` carries an `asOf` date. Sundust's own agenda re-checks it weekly.
+
+## Two schedulers
+
+Claude Code ships its own scheduled tasks at
+`~/.claude/scheduled-tasks/<id>/SKILL.md`, run by the desktop app. Sundust reads
+that directory and shows those tasks on the matching project card with a
+different glyph, so one screen answers "what runs on its own?" regardless of
+which scheduler fires it. Sundust never triggers them — they belong to the app.
+
+Claude's own scheduler survives Sundust not running. Sundust's agenda gives you
+run history, cost, the `NEEDS INPUT` inbox, and a resumable session per run.
 
 ## Templates
 
-`orrery new` scaffolds the folder, writes a `CLAUDE.md` describing the data shapes,
-preloads an agenda, and opens Claude with a starter prompt.
-
 | Template | What it sets up |
 |---|---|
-| `blank` | Empty project wired into Orrery |
+| `blank` | Empty project wired into Sundust |
 | `finance` | Statement ingest → normalised ledger → rules-based categorisation → weekly report |
 | `recipes` | Recipe box, pantry, weekly plan with a consolidated shopping list |
 | `fitness` | Freeform session logging, estimated-1RM progression, weekly block review |
@@ -94,106 +139,89 @@ preloads an agenda, and opens Claude with a starter prompt.
 ## CLI
 
 ```
-orrery up                 dashboard + scheduler
-orrery serve              dashboard only
-orrery daemon             scheduler only
+sundust up                 dashboard + scheduler
+sundust serve              dashboard only
+sundust daemon             scheduler only
 
-orrery new <name>         scaffold a project and open Claude in it
-                          --template blank|finance|recipes|fitness|journal
-                          --autonomy off|read|edit
-orrery adopt [dir]        bring an existing folder into Orrery
-orrery relocate <m> <dir> point a project at a folder you moved
-orrery ls [--v]           list projects and status
-orrery next               jump to whatever is waiting on you
-orrery go [match]         open a project's most relevant session
-orrery run <match> [task] run an agenda task now, headless
+sundust new <name>         scaffold a project and open your harness in it
+                           --template blank|finance|recipes|fitness|journal
+                           --autonomy off|read|edit
+sundust adopt [dir]        bring an existing folder into Sundust
+sundust relocate <m> <dir> point a project at a folder you moved
+sundust ls [--v]           list projects and status
+sundust next               jump to whatever is waiting on you
+sundust go [match]         open a project's most relevant session
+sundust run <match> [task] run an agenda task now, headless
 ```
 
-`orrery next` is the one worth aliasing. It finds the most blocking thing across
-every project and opens it.
+`sundust next` is the one worth aliasing.
 
 ## Keyboard
 
-- `⌘K` — command palette: jump to any session, run any task, start anything new
+- `⌘K` — palette: jump to a session, run a task, look up a limit, start something new
 - `n` — new project
 
 ## Layout
 
 ```
 src/config.js      paths, settings
-src/scan.js        incremental JSONL indexer + live-pid detection
-src/projects.js    registry, scaffolding, auto-discovery of untracked folders
-src/templates.js   project templates          ← add your own here
+src/harnesses.js   harness definitions       ← add a harness here
+src/limits.js      harness limits reference  ← keep this current
+src/stages.js      stellar stage mapping
+src/scan.js        incremental transcript indexer + live-process detection
+src/projects.js    registry, scaffolding, relocation, auto-discovery
+src/templates.js   project templates         ← add your own here
 src/autonomy.js    cron, headless runner, NEEDS INPUT parsing
-src/deeplink.js    claude:// URL builders
+src/claude-tasks.js reads Claude Code's own scheduler
+src/deeplink.js    harness-aware links
 src/server.js      HTTP API + SSE
 web/               vanilla dashboard, no build step
 ```
 
-When a project folder moves, `orrery relocate` records the old path as an alias.
+When a project folder moves, `sundust relocate` records the old path as an alias.
 Transcripts store the working directory they ran in, so without that alias every
-session from before the move would detach from its project.
+session from before the move would detach.
 
-State lives in `~/.orrery/` (`projects.json`, `settings.json`, `asks.json`,
-`runs/`, `index.json`). Nothing in `~/.claude` is ever written to.
-
-Adding a template is one entry in `src/templates.js`. Adding a project kind that
-needs different permissions is a `permissionArgs` field on the project record.
+State lives in `~/.sundust/`. Nothing in `~/.claude` is ever written to.
 
 ## Prior art
 
-The ecosystem is large and worth knowing before adding to it. Star counts as of
-September 2026:
+Star counts as of September 2026:
 
 | Project | Stars | What it is |
 |---|---|---|
 | [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) | 39k | Teams-first multi-agent orchestration |
 | [claude-code-router](https://github.com/musistudio/claude-code-router) | 37k | Control plane for routing across models |
-| [builderz-labs/mission-control](https://github.com/builderz-labs/mission-control) | 6.2k | Self-hosted control plane: dispatch tasks, review runs, track spend |
+| [builderz-labs/mission-control](https://github.com/builderz-labs/mission-control) | 6.2k | Self-hosted control plane: dispatch, review runs, track spend |
 | [21st-dev/1code](https://github.com/21st-dev/1code) | 5.6k | Orchestration layer for coding agents |
 | [phuryn/claude-usage](https://github.com/phuryn/claude-usage) | 2.2k | Token and cost dashboard over the same local logs |
-| [kbwo/ccmanager](https://github.com/kbwo/ccmanager) | 1.2k | Session manager across agent CLIs |
-| [Ark0N/Codeman](https://github.com/Ark0N/Codeman) | 742 | Mission control, agents 24/7 from any device |
+| [Ark0N/Codeman](https://github.com/Ark0N/Codeman) | 742 | Agents 24/7 from any device |
 | [h0x91b/dev-3.0](https://github.com/h0x91b/dev-3.0) | 252 | Kanban where every card is a live agent in its own worktree |
-| [lacion/fleet-deck](https://github.com/lacion/fleet-deck) | 28 | Control plane for every Claude Code session on one machine |
+| [lacion/fleet-deck](https://github.com/lacion/fleet-deck) | 28 | Control plane for every session on one machine |
 
-Every one of them is a **developer-workflow** tool: parallel agents on a codebase,
-git worktrees, kanban of coding tasks, token spend. Orrery is aimed somewhere else
-— long-lived personal projects that happen to be built with Claude, each moving on
-its own over weeks, where the question is not "which agent is on which branch" but
-"which of my things needs me today".
+Every one is a **developer-workflow** tool: parallel agents on a codebase, git
+worktrees, kanban of coding tasks. Sundust is aimed elsewhere — long-lived
+personal projects that happen to be built with an agent, each moving on its own
+over weeks, where the question is not "which agent is on which branch" but "which
+of my things needs me today".
 
-Two ideas worth borrowing, and borrowed: Fleet Deck's rule that the tool must
-never become a dependency of the loop it observes (Orrery only ever reads
-`~/.claude`), and its conflict awareness (the scheduler refuses to run where a
-human already is).
-
-## Two schedulers
-
-Claude Code now ships its own scheduled tasks, stored at
-`~/.claude/scheduled-tasks/<id>/SKILL.md` and run by the desktop app. Orrery reads
-that directory and shows those tasks on the matching project card, marked with a
-different glyph, so one screen answers "what runs on its own?" no matter which
-scheduler fires it. Orrery never triggers them — they belong to the app.
-
-Which to use: Claude's own scheduler survives Orrery not running and is the better
-home for things that just need to happen. Orrery's agenda gives you the run
-history, the cost, the `NEEDS INPUT` inbox, and a resumable session per run.
+Borrowed from Fleet Deck: the rule that the tool must never become a dependency
+of the loop it observes (Sundust only ever reads harness state), and its conflict
+awareness (the scheduler refuses to run where a human already is).
 
 ## Requirements
 
 - Node 20+
-- Claude Code desktop app (for the `claude://` links)
-- A signed-in `claude` CLI (for headless runs) — run `claude` once in a terminal.
-  If it is not signed in, the dashboard says so; the rest still works.
+- For deep links: the Claude Code desktop app
+- For headless runs: a signed-in harness CLI. If `claude` is not signed in, the
+  dashboard says so and the rest still works.
 
 ## Known edges
 
-- Deep links are macOS-tested. The `claude://` scheme is registered by the desktop
-  app on other platforms too, but the `open` shim in `bin/orrery.js` only falls
-  back to `xdg-open` / `start`.
+- Deep links are macOS-tested; the `open` shim falls back to `xdg-open` / `start`.
 - `needsInput` is inferred: a session is waiting if its process is alive and its
-  transcript ends on an assistant turn with no tool call. That is accurate in
-  practice but it is inference, not a flag the app sets.
-- Token totals include cache reads, which dominate. They measure activity, not spend.
-  The `auto spend` figure is real — it comes from `total_cost_usd` on headless runs.
+  transcript ends on an assistant turn with no tool call. Accurate in practice,
+  but inference, not a flag the harness sets.
+- Token totals include cache reads, which dominate. They measure activity, not
+  spend. The `auto spend` figure is real — it comes from the harness's own
+  reported cost on headless runs.

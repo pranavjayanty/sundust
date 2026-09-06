@@ -1,12 +1,8 @@
 const $ = (s, r = document) => r.querySelector(s);
 const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
 
-// The whole palette. Status reads by luminance and motion, never by a second hue.
-const INK = '#f4f4f5', GHOST = '#3d3d45', ACCENT = '#ffa51f';
-const needsHuman = (s) => s === 'blocked' || s === 'waiting';
-const bodyInk = (s) => needsHuman(s) ? ACCENT : s === 'working' ? INK : GHOST;
-
 let STATE = null, selected = null;
+const STAGE = {};   // filled from the server so colours live in one place
 
 const api = async (p, opt) => {
   const r = await fetch(p, { headers: { 'content-type': 'application/json' }, ...opt });
@@ -15,7 +11,6 @@ const api = async (p, opt) => {
   return j;
 };
 const post = (p, b) => api(p, { method: 'POST', body: JSON.stringify(b) });
-
 const closeDialogs = () => { for (const d of document.querySelectorAll('dialog[open]')) d.close(); };
 
 function toast(msg, bad) {
@@ -24,10 +19,10 @@ function toast(msg, bad) {
   setTimeout(() => t.remove(), bad ? 6500 : 3200);
 }
 
-const openLink = (url) => post('/api/open', { url }).catch(() => { location.href = url; });
-const jump = (id) => openLink(`claude://code/continue?session=local_${id}&source=orrery`);
-const fresh = (folder, prompt) =>
-  openLink(`claude://code/new?folder=${encodeURIComponent(folder)}${prompt ? `&prompt=${encodeURIComponent(prompt)}` : ''}&source=orrery`);
+const openLink = (url) => {
+  if (!url) return toast('this harness has no deep link — use Reveal', true);
+  post('/api/open', { url }).catch(() => { location.href = url; });
+};
 
 function ago(ts) {
   if (!ts) return 'never';
@@ -40,11 +35,15 @@ function ago(ts) {
 }
 const num = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n || 0);
 const money = (n) => n ? `$${n < 1 ? n.toFixed(2) : n.toFixed(n < 100 ? 2 : 0)}` : '$0';
+const stageColour = (id) => STAGE[id]?.colour || '#9a7768';
 
-/* ------------------------------------------------------------------ orbit */
-const canvas = $('#orbit');
+/* ==================================================================== field
+   Projects laid out like an HR diagram: horizontal is colour temperature
+   (how recently it burned), vertical is luminosity (how much work is in it).
+   Each project is drawn as the star it currently is.                        */
+const canvas = $('#field');
 const ctx = canvas.getContext('2d');
-let bodies = [], hover = null;
+let stars = [], hover = null;
 
 function resize() {
   const r = canvas.getBoundingClientRect();
@@ -55,117 +54,181 @@ function resize() {
 addEventListener('resize', () => { resize(); layout(); });
 
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967295; };
+const coolness = (ts) => Math.min(1, Math.log10(1 + Math.max(0, Date.now() - (ts || 0)) / 3600000) / Math.log10(1 + 24 * 45));
 
 function layout() {
   const r = canvas.getBoundingClientRect();
-  const cx = r.width / 2, cy = r.height / 2;
-  const rxMax = Math.max(120, r.width / 2 - 100);
-  const ryMax = Math.max(56, r.height / 2 - 54);
-  const ps = [...(STATE?.projects || [])].sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
-  const maxTok = Math.max(1, ...ps.map((p) => p.tokens || 0));
-  const n = ps.length || 1;
+  const ps = STATE?.projects || [];
+  const padX = 72, padTop = 52, padBot = 78;
+  const w = Math.max(60, r.width - padX * 2);
+  const h = Math.max(50, r.height - padTop - padBot);
+  const maxLum = Math.max(1, ...ps.map((p) => (p.tokens || 0) + p.sessionCount * 2e6));
 
-  bodies = ps.map((p, i) => {
-    // Rank keeps the rings separated; elapsed time then stretches the gaps, so a
-    // project idle for a month sits visibly further out than one idle for a day.
-    const hours = Math.max(0, Date.now() - (p.lastActivity || 0)) / 3600000;
-    const ageFrac = Math.min(1, Math.log10(1 + hours) / Math.log10(1 + 24 * 60));
-    const rankFrac = n === 1 ? 0.22 : i / (n - 1);
-    const t = 0.6 * rankFrac + 0.4 * ageFrac;
-    const rx = 76 + t * (rxMax - 76), ry = 42 + t * (ryMax - 42);
-    const angle = i * 2.39996 + hash(p.id) * 0.9;   // golden angle spreads them apart
-    const size = 5 + Math.sqrt((p.tokens || 0) / maxTok) * 10;
-    return { p, rx, ry, angle, size, x: cx + Math.cos(angle) * rx, y: cy + Math.sin(angle) * ry };
+  stars = ps.map((p) => {
+    const cool = coolness(p.lastActivity);
+    const lum = ((p.tokens || 0) + p.sessionCount * 2e6) / maxLum;
+    const jitter = (hash(p.id) - 0.5) * 26;
+    return {
+      p, cool,
+      radius: 5 + Math.sqrt(lum) * 13,
+      x: padX + cool * w,
+      y: padTop + (1 - Math.sqrt(lum)) * h + jitter,
+      phase: hash(p.id + 'p') * Math.PI * 2
+    };
   });
+
+  // nudge apart so labels stay legible when several projects cluster
+  for (let pass = 0; pass < 24; pass++) {
+    let moved = false;
+    for (let i = 0; i < stars.length; i++) {
+      for (let j = i + 1; j < stars.length; j++) {
+        const a = stars[i], b = stars[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.hypot(dx, dy) || 0.01;
+        const min = a.radius + b.radius + 46;
+        if (d < min) {
+          const push = (min - d) / 2, ux = dx / d, uy = dy / d;
+          a.x -= ux * push; a.y -= uy * push;
+          b.x += ux * push; b.y += uy * push;
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  for (const s of stars) {
+    s.x = Math.max(padX * 0.5, Math.min(r.width - padX * 0.5, s.x));
+    s.y = Math.max(padTop * 0.7, Math.min(r.height - padBot, s.y));
+  }
+}
+
+function corona(x, y, rad, colour, alpha) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+  g.addColorStop(0, colour + Math.round(alpha * 255).toString(16).padStart(2, '0'));
+  g.addColorStop(1, colour + '00');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+}
+
+/** Each stage gets its own rendering — the shape carries the state. */
+function drawStar(s, t) {
+  const { x, y, radius: R, p } = s;
+  const c = stageColour(p.stage);
+  const beat = Math.sin(t / 700 + s.phase);
+
+  switch (p.stage) {
+    case 'flare': {
+      corona(x, y, R * (4.6 + beat * 0.6), c, 0.34);
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+      // prominences: loops anchored on the limb, evenly spaced around the star
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 4; i++) {
+        const a = t / 1800 + s.phase + (i * Math.PI * 2) / 4;
+        const reach = R * (1.42 + 0.3 * Math.sin(t / 520 + i * 1.7));
+        ctx.beginPath();
+        ctx.arc(x, y, reach, a - 0.5, a + 0.5);
+        ctx.strokeStyle = c;
+        ctx.globalAlpha = 0.32 + 0.3 * (0.5 + 0.5 * Math.sin(t / 520 + i * 1.7));
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff8e4';
+      ctx.beginPath(); ctx.arc(x - R * 0.22, y - R * 0.22, R * 0.4, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'supernova': {
+      const ring = (t / 26 + s.phase * 90) % 100 / 100;
+      corona(x, y, R * 3.4, c, 0.28);
+      ctx.strokeStyle = c; ctx.globalAlpha = 1 - ring; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, R + ring * R * 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(x, y, R * 0.82, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'main-sequence': {
+      corona(x, y, R * (2.9 + beat * 0.22), c, 0.3);
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,248,228,.55)';
+      ctx.beginPath(); ctx.arc(x - R * 0.24, y - R * 0.24, R * 0.36, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'protostar': {
+      // still collapsing: diffuse, no hard edge
+      corona(x, y, R * 3.6, c, 0.26);
+      ctx.setLineDash([3, 4]);
+      ctx.strokeStyle = c; ctx.globalAlpha = .6; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(x, y, R * 1.25, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.fillStyle = c; ctx.globalAlpha = .8;
+      ctx.beginPath(); ctx.arc(x, y, Math.max(3, R * 0.68), 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'red-giant': {
+      // swollen and cooling: big soft envelope, dim core
+      corona(x, y, R * 3.2, c, 0.2);
+      ctx.fillStyle = c; ctx.globalAlpha = .32;
+      ctx.beginPath(); ctx.arc(x, y, R * 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = .85;
+      ctx.beginPath(); ctx.arc(x, y, R * 0.72, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    default: { // white dwarf — a dim remnant
+      corona(x, y, R * 1.9, c, 0.16);
+      ctx.strokeStyle = c; ctx.globalAlpha = .5; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(x, y, R * 0.62, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(x, y, Math.max(1.6, R * 0.3), 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  const focus = s === hover || p === selected;
+  const label = p.name.length > 24 ? `${p.name.slice(0, 23)}…` : p.name;
+  ctx.font = `${focus ? '600 ' : ''}10.5px -apple-system,system-ui,sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(12,9,8,.95)';
+  const ly = y + R + 17;
+  ctx.strokeText(label, x, ly);
+  ctx.fillStyle = focus ? '#f8f1e9' : `${c}c0`;
+  ctx.fillText(label, x, ly);
 }
 
 function draw(t = 0) {
   const r = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, r.width, r.height);
-  const cx = r.width / 2, cy = r.height / 2;
 
-  for (const b of bodies) {
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, b.rx, b.ry, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = b.p === selected ? 'rgba(244,244,245,.16)' : 'rgba(244,244,245,.045)';
-    ctx.lineWidth = 1; ctx.stroke();
+  // faint dust so an empty field still reads as sky
+  for (let i = 0; i < 40; i++) {
+    const dx = ((i * 97.13) % 1) * r.width, dy = ((i * 51.7) % 1) * r.height;
+    ctx.fillStyle = `rgba(248,241,233,${0.02 + ((i * 13) % 5) * 0.008})`;
+    ctx.beginPath(); ctx.arc(dx, dy, 0.7, 0, Math.PI * 2); ctx.fill();
   }
-
-  // the centre is now; everything orbits away from it as it goes stale
-  ctx.fillStyle = 'rgba(244,244,245,.14)';
-  ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
-  for (let i = 0; i < 4; i++) {
-    const a = (i * Math.PI) / 2;
-    ctx.strokeStyle = 'rgba(244,244,245,.11)'; ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a) * 8, cy + Math.sin(a) * 8);
-    ctx.lineTo(cx + Math.cos(a) * 14, cy + Math.sin(a) * 14);
-    ctx.stroke();
-  }
-
-  for (const b of bodies) {
-    const speed = b.p.status === 'working' ? 0.00005 : 0.000013;
-    const a = b.angle + t * speed;
-    b.x = cx + Math.cos(a) * b.rx;
-    b.y = cy + Math.sin(a) * b.ry;
-
-    const attn = needsHuman(b.p.status);
-    const ink = bodyInk(b.p.status);
-    const focus = b === hover || b.p === selected;
-
-    if (attn) {
-      const halo = (Math.sin(t / 560) + 1) / 2;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.size + 7 + halo * 12, 0, Math.PI * 2);
-      ctx.strokeStyle = ACCENT; ctx.globalAlpha = 0.4 * (1 - halo); ctx.lineWidth = 1.5;
-      ctx.stroke(); ctx.globalAlpha = 1;
-
-      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.size * 3.4);
-      g.addColorStop(0, 'rgba(255,165,31,.34)'); g.addColorStop(1, 'rgba(255,165,31,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.size * 3.4, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // filled = live or waiting, hollow = idle. Form carries the state, not colour.
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
-    if (b.p.status === 'idle') {
-      ctx.strokeStyle = focus ? 'rgba(244,244,245,.5)' : ink;
-      ctx.lineWidth = 1.2; ctx.stroke();
-    } else {
-      ctx.fillStyle = ink; ctx.fill();
-    }
-    if (b.p.status === 'failed') {
-      ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.size + 4, 0, Math.PI * 2); ctx.stroke();
-    }
-
-    const below = b.y < cy + b.ry * 0.5;
-    const ly = below ? b.y + b.size + 15 : b.y - b.size - 9;
-    ctx.font = '10.5px -apple-system,system-ui,sans-serif';
-    ctx.textAlign = 'center';
-    ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(10,10,11,.95)';
-    const label = b.p.name.length > 22 ? `${b.p.name.slice(0, 21)}…` : b.p.name;
-    ctx.strokeText(label, b.x, ly);
-    ctx.fillStyle = focus ? INK : attn ? 'rgba(255,165,31,.85)' : 'rgba(244,244,245,.42)';
-    ctx.fillText(label, b.x, ly);
-  }
+  for (const s of stars) drawStar(s, t);
   requestAnimationFrame(draw);
 }
 
 canvas.addEventListener('mousemove', (e) => {
   const r = canvas.getBoundingClientRect();
   const x = e.clientX - r.left, y = e.clientY - r.top;
-  hover = bodies.find((b) => Math.hypot(b.x - x, b.y - y) < b.size + 10) || null;
+  hover = stars.find((s) => Math.hypot(s.x - x, s.y - y) < s.radius + 12) || null;
   const tip = $('#tip');
   if (!hover) { tip.hidden = true; return; }
   const p = hover.p;
   tip.innerHTML = '';
-  tip.append(el('b', null, p.name));
-  const line = [p.status, `${p.sessionCount} session${p.sessionCount === 1 ? '' : 's'}`, `${ago(p.lastActivity)} ago`];
-  if (p.asks.length) line.push(`${p.asks.length} open`);
-  tip.append(el('small', null, line.join('  ·  ')));
+  const st = el('div', 'stg', p.stageLabel);
+  st.style.color = stageColour(p.stage);
+  tip.append(st, el('b', null, p.name));
+  tip.append(el('small', null, STAGE[p.stage]?.detail || ''));
+  tip.append(el('small', null, `${p.sessionCount} session${p.sessionCount === 1 ? '' : 's'} · ${ago(p.lastActivity)} ago · ${num(p.tokens)} tok`));
   tip.hidden = false;
-  tip.style.left = `${Math.min(x + 16, r.width - 286)}px`;
-  tip.style.top = `${Math.max(8, y - 46)}px`;
+  tip.style.left = `${Math.min(x + 16, r.width - 296)}px`;
+  tip.style.top = `${Math.max(8, y - 62)}px`;
 });
 canvas.addEventListener('mouseleave', () => { hover = null; $('#tip').hidden = true; });
 canvas.addEventListener('click', () => {
@@ -175,7 +238,7 @@ canvas.addEventListener('click', () => {
   render();
 });
 
-/* ------------------------------------------------------------------ render */
+/* ================================================================== render */
 function stat(label, value, hot) {
   const d = el('div', `stat${hot ? ' hot' : ''}`);
   d.append(el('b', null, value), el('span', null, label));
@@ -185,10 +248,11 @@ const sectionTitle = (text) => { const h = el('div', 'sec'); h.append(el('span',
 
 function render() {
   const s = STATE; if (!s) return;
+  for (const st of s.stages || []) STAGE[st.id] = st;
 
   $('#tagline').textContent = s.projects.length
-    ? `${s.projects.length} project${s.projects.length === 1 ? '' : 's'} in orbit`
-    : 'nothing in orbit yet';
+    ? `${s.projects.length} project${s.projects.length === 1 ? '' : 's'} burning`
+    : 'no stars yet';
 
   const waitingSess = s.projects.flatMap((p) => p.sessions).filter((x) => x.needsInput);
   const pending = s.asks.length + waitingSess.length;
@@ -206,10 +270,18 @@ function render() {
   attn.hidden = pending === 0;
   attn.textContent = `${pending} waiting`;
   attn.onclick = () => {
-    if (s.asks[0]) return jump(s.asks[0].sessionId);
-    if (waitingSess[0]) return jump(waitingSess[0].id);
-    openLink('claude://code/needs-input?source=orrery');
+    if (s.asks[0]?.link) return openLink(s.asks[0].link);
+    if (waitingSess[0]?.link) return openLink(waitingSess[0].link);
   };
+
+  const legend = $('#legend'); legend.innerHTML = '';
+  for (const st of s.stages || []) {
+    const item = el('span');
+    const dot = el('i', 'd'); dot.style.background = st.colour;
+    item.append(dot, document.createTextNode(st.label));
+    item.title = st.detail;
+    legend.append(item);
+  }
 
   const warnHost = $('#warn'); warnHost.innerHTML = '';
   if (s.authWarning) {
@@ -218,7 +290,7 @@ function render() {
     warnHost.append(w);
   }
 
-  renderAsks(s); renderDeck(s); renderAdoptable(s);
+  renderAsks(s); renderDeck(s); renderAdoptable(s); renderLimits();
 
   const foot = $('#foot'); foot.innerHTML = '';
   foot.append(
@@ -227,13 +299,11 @@ function render() {
     el('span', null, s.settings.autonomyEnabled ? 'autonomy enabled' : 'autonomy paused'),
     el('span', null, s.settings.workspaceRoot)
   );
-
   layout();
 }
 
 function renderAsks(s) {
   const wrap = $('#asks'); wrap.innerHTML = '';
-  if (!s.asks.length) return;
   for (const a of s.asks) {
     const row = el('div', 'ask');
     const q = el('div', 'q');
@@ -242,7 +312,7 @@ function renderAsks(s) {
     if (a.context) q.append(el('div', 'ctx', a.context.slice(0, 380)));
     const acts = el('div', 'acts');
     const answer = el('button', 'btn primary', 'Answer');
-    answer.onclick = () => jump(a.sessionId);
+    answer.onclick = () => openLink(a.link);
     const dismiss = el('button', 'btn ghost', 'Dismiss');
     dismiss.onclick = async () => { await post('/api/ask/resolve', { id: a.id }); refresh(); };
     acts.append(answer, dismiss);
@@ -255,31 +325,34 @@ function renderDeck(s) {
   const deck = $('#deck'); deck.innerHTML = '';
   if (!s.projects.length) {
     const e = el('div', 'empty');
-    e.append(el('h3', null, 'Nothing in orbit yet'));
-    e.append(el('p', null, 'Create a project and Orrery scaffolds the folder, teaches the agent how it works, and starts running its agenda on a schedule.'));
+    e.append(el('h3', null, 'No stars yet'));
+    e.append(el('p', null, 'Create a project and Sundust scaffolds the folder, briefs the agent, and starts running its agenda on a schedule.'));
     const b = el('button', 'btn primary', 'New project'); b.onclick = openNew;
     e.append(b); deck.append(e); return;
   }
 
   for (const p of s.projects) {
-    const attn = needsHuman(p.status);
+    const colour = stageColour(p.stage);
+    const attn = STAGE[p.stage]?.needsHuman;
     const card = el('div', `card${attn ? ' attn' : ''}`);
     card.id = `card-${p.id}`;
+    card.style.setProperty('--stage', colour);
 
     const top = el('div', 'card-top');
     top.append(el('div', 'glyph', p.emoji));
     const h = el('div'); h.style.cssText = 'min-width:0;flex:1';
     h.append(el('h3', null, p.name), el('div', 'where', p.path.replace(/^\/Users\/[^/]+/, '~')));
-    top.append(h, el('span', `pill ${attn ? 'attn' : p.status === 'working' ? 'working' : ''}`,
-      p.exists ? p.status : 'missing'));
+    top.append(h, el('span', 'pill', p.exists ? p.stageLabel : 'missing'));
     card.append(top);
 
     const meta = el('div', 'meta');
     meta.append(el('span', null, `${ago(p.lastActivity)} ago`));
     meta.append(el('span', null, `${p.sessionCount} session${p.sessionCount === 1 ? '' : 's'}`));
     if (p.tokens) meta.append(el('span', null, `${num(p.tokens)} tok`));
-    if (p.costUsd) meta.append(el('span', null, `${money(p.costUsd)}`));
+    if (p.costUsd) meta.append(el('span', null, money(p.costUsd)));
     meta.append(el('span', null, p.autonomy));
+    const hz = el('span', 'hz', (STATE.harnesses.find((x) => x.id === p.harness)?.label) || p.harness);
+    meta.append(hz);
     card.append(meta);
 
     if (p.sessions.length) {
@@ -288,7 +361,7 @@ function renderDeck(s) {
         const b = el('button', `sess${x.live ? ' live' : ''}${x.needsInput ? ' needs' : ''}`);
         b.append(el('i', 'st'), el('span', 't', x.title), el('span', 'a', ago(x.lastActivity)));
         b.title = `${x.humanTurns} of your turns · ${x.assistantTurns} replies · ${x.toolCalls} tool calls`;
-        b.onclick = () => jump(x.id);
+        b.onclick = () => openLink(x.link);
         list.append(b);
       }
       card.append(list);
@@ -327,15 +400,15 @@ function renderDeck(s) {
     const openBtn = el('button', 'btn primary', 'Open');
     openBtn.onclick = () => {
       const nx = p.sessions.find((x) => x.needsInput) || p.sessions.find((x) => x.live);
-      nx ? jump(nx.id) : fresh(p.path);
+      openLink(nx?.link || p.links.open);
     };
     const newBtn = el('button', 'btn', 'New session');
-    newBtn.onclick = () => fresh(p.path);
+    newBtn.onclick = () => openLink(p.links.open);
     const runBtn = el('button', 'btn', 'Run…');
     runBtn.onclick = () => openRun(p);
-    const finder = el('button', 'btn ghost', 'Reveal');
-    finder.onclick = () => openLink(`file://${p.path}`);
-    acts.append(openBtn, newBtn, runBtn, finder);
+    const reveal = el('button', 'btn ghost', 'Reveal');
+    reveal.onclick = () => openLink(p.links.reveal);
+    acts.append(openBtn, newBtn, runBtn, reveal);
     card.append(acts);
     deck.append(card);
   }
@@ -344,7 +417,7 @@ function renderDeck(s) {
 function renderAdoptable(s) {
   const wrap = $('#adoptable'); wrap.innerHTML = '';
   if (!s.candidates.length) return;
-  wrap.append(sectionTitle('untracked folders with claude sessions'));
+  wrap.append(sectionTitle('untracked folders with sessions'));
   for (const c of s.candidates.slice(0, 6)) {
     const row = el('div', 'adopt-row');
     row.append(el('span', 'n', c.name), el('span', 'p', c.path.replace(/^\/Users\/[^/]+/, '~')));
@@ -356,7 +429,36 @@ function renderAdoptable(s) {
   }
 }
 
-/* ------------------------------------------------------------------ new */
+/* ================================================================== limits */
+function renderLimits() {
+  const q = $('#lim-search').value.toLowerCase().trim();
+  const rows = (STATE.limits || []).filter((r) =>
+    !q || `${r.harness} ${r.group} ${r.key} ${r.value} ${r.detail || ''} ${r.tags || ''}`.toLowerCase().includes(q));
+  const table = $('#lim-table'); table.innerHTML = '';
+  if (!rows.length) { table.append(el('div', 'lim-row', 'nothing matches')); }
+  const label = (id) => STATE.harnesses.find((h) => h.id === id)?.label || id;
+  for (const r of rows) {
+    const row = el('div', 'lim-row');
+    row.append(el('span', 'h', label(r.harness)));
+    row.append(el('span', 'k', `${r.group} · ${r.key}`));
+    const v = el('span', 'v'); v.append(document.createTextNode(r.value));
+    if (r.detail) v.append(el('em', null, r.detail));
+    row.append(v);
+    row.append(el('span', `conf ${r.confidence}`, r.confidence));
+    table.append(row);
+  }
+  const note = $('#lim-note'); note.innerHTML = '';
+  note.append(document.createTextNode(
+    `${rows.length} of ${STATE.limits.length} rows · checked ${STATE.limitsAsOf} · vendors publish context and output windows but mostly not the token counts behind subscription limits, so “estimate” rows are community-reported. Sources: `));
+  (STATE.limitSources || []).forEach((s, i) => {
+    if (i) note.append(document.createTextNode(' · '));
+    const a = el('a', null, s.label); a.href = s.url; a.target = '_blank'; a.rel = 'noreferrer';
+    note.append(a);
+  });
+}
+$('#lim-search').addEventListener('input', renderLimits);
+
+/* ===================================================================== new */
 let chosenTemplate = 'blank';
 function openNew() {
   const dlg = $('#dlg-new');
@@ -369,6 +471,18 @@ function openNew() {
     b.onclick = () => { chosenTemplate = t.id; openNew(); };
     tpl.append(b);
   }
+  const hsel = $('#new-harness');
+  if (!hsel.options.length) {
+    for (const h of STATE.harnesses) {
+      const o = el('option', null, `${h.label} — ${h.vendor}`);
+      o.value = h.id;
+      hsel.append(o);
+    }
+    hsel.value = 'claude-code';
+    hsel.onchange = harnessHint;
+  }
+  harnessHint();
+
   const name = $('#new-name');
   const slug = (v) => String(v).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const upd = () => { $('#new-path').textContent = name.value ? `${STATE.settings.workspaceRoot}/${slug(name.value)}`.replace(/^\/Users\/[^/]+/, '~') : ''; };
@@ -377,19 +491,30 @@ function openNew() {
   name.focus();
 }
 
+function harnessHint() {
+  const h = STATE.harnesses.find((x) => x.id === $('#new-harness').value);
+  $('#harness-hint').textContent = !h ? '' : h.support === 'full'
+    ? `${h.bin} · transcripts indexed, sessions one click away, headless runs supported`
+    : `${h.bin} · headless runs and scheduling work; session indexing and deep links are not wired up yet`;
+}
+
 $('#new-create').onclick = async () => {
   const name = $('#new-name').value.trim();
   if (!name) return toast('give it a name', true);
   try {
-    const r = await post('/api/project', { name, template: chosenTemplate, autonomy: $('#new-autonomy').value });
+    const r = await post('/api/project', {
+      name, template: chosenTemplate,
+      autonomy: $('#new-autonomy').value,
+      harness: $('#new-harness').value
+    });
     $('#dlg-new').close(); $('#new-name').value = '';
-    toast(`${r.project.name} created — opening Claude`);
-    openLink(r.link);
+    toast(`${r.project.name} created`);
+    if (r.link) openLink(r.link);
     refresh();
   } catch (e) { toast(e.message, true); }
 };
 
-/* ------------------------------------------------------------------ run */
+/* ===================================================================== run */
 let runTarget = null;
 function openRun(p) {
   runTarget = p;
@@ -410,15 +535,15 @@ $('#run-go').onclick = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
-/* ------------------------------------------------------------------ palette */
+/* ================================================================= palette */
 function paletteItems() {
   const out = [];
   for (const a of STATE.asks) {
-    out.push({ kind: 'answer', hot: true, icon: '◆', label: `${a.projectName}: ${a.question}`, run: () => jump(a.sessionId) });
+    out.push({ kind: 'answer', hot: true, icon: '◆', label: `${a.projectName}: ${a.question}`, run: () => openLink(a.link) });
   }
   for (const p of STATE.projects) {
     for (const x of p.sessions.filter((v) => v.needsInput)) {
-      out.push({ kind: 'waiting', hot: true, icon: '◆', label: `${p.name} · ${x.title}`, run: () => jump(x.id) });
+      out.push({ kind: 'waiting', hot: true, icon: '◆', label: `${p.name} · ${x.title}`, run: () => openLink(x.link) });
     }
   }
   for (const t of STATE.templates) {
@@ -426,14 +551,29 @@ function paletteItems() {
       run: () => { chosenTemplate = t.id; closeDialogs(); openNew(); } });
   }
   for (const p of STATE.projects) {
-    out.push({ kind: 'open', icon: p.emoji, label: `${p.name} — new session`, run: () => fresh(p.path) });
+    out.push({ kind: 'open', icon: p.emoji, label: `${p.name} — new session`, run: () => openLink(p.links.open) });
     for (const x of p.sessions.filter((v) => !v.needsInput).slice(0, 6)) {
-      out.push({ kind: 'session', icon: '·', label: `${p.name} · ${x.title}`, run: () => jump(x.id) });
+      out.push({ kind: 'session', icon: '·', label: `${p.name} · ${x.title}`, run: () => openLink(x.link) });
     }
     for (const t of (p.agenda || []).filter((v) => v.source !== 'claude')) {
       out.push({ kind: 'run', icon: '▶', label: `${p.name} · run "${t.title}"`,
         run: async () => { try { await post('/api/run', { projectId: p.id, taskId: t.id }); toast('running'); refresh(); } catch (e) { toast(e.message, true); } } });
     }
+  }
+  // limits are searchable from the same box
+  const hl = (id) => STATE.harnesses.find((h) => h.id === id)?.label || id;
+  for (const r of STATE.limits || []) {
+    out.push({
+      kind: 'limit', icon: '◷',
+      label: `${hl(r.harness)} · ${r.key}: ${r.value}${r.detail ? ` — ${r.detail}` : ''}`,
+      search: `${r.harness} ${r.group} ${r.tags || ''}`,
+      run: () => {
+        closeDialogs();
+        $('#lim-search').value = r.key;
+        renderLimits();
+        $('#lim-search').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
   }
   return out;
 }
@@ -442,7 +582,10 @@ let palIdx = 0, palShown = [];
 function renderPalette() {
   const q = $('#pal-input').value.toLowerCase().trim();
   const all = paletteItems();
-  palShown = (q ? all.filter((i) => i.label.toLowerCase().includes(q) || i.kind.includes(q)) : all).slice(0, 40);
+  palShown = (q
+    ? all.filter((i) => `${i.label} ${i.kind} ${i.search || ''}`.toLowerCase().includes(q))
+    : all.filter((i) => i.kind !== 'limit')
+  ).slice(0, 40);
   palIdx = Math.min(palIdx, Math.max(0, palShown.length - 1));
   const list = $('#pal-list'); list.innerHTML = '';
   palShown.forEach((i, n) => {
@@ -475,12 +618,11 @@ $('#btn-palette').onclick = openPalette;
 $('#btn-new').onclick = openNew;
 for (const b of document.querySelectorAll('[data-close]')) b.onclick = (e) => e.target.closest('dialog').close();
 
-/* ------------------------------------------------------------------ boot */
+/* ==================================================================== boot */
 async function refresh() {
   try { STATE = await api('/api/state'); render(); }
   catch (e) { toast(`could not read state: ${e.message}`, true); }
 }
-
 resize();
 refresh();
 requestAnimationFrame(draw);

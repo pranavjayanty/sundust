@@ -13,7 +13,11 @@ import {
   recentRuns, listRuns, loadAsks, resolveAsk, runTask, tick, describeCron, activeRunCount
 } from './autonomy.js';
 import { claudeScheduledTasks, attachToProjects } from './claude-tasks.js';
+import { stageOf, stageList } from './stages.js';
+import { harnessList, DEFAULT_HARNESS } from './harnesses.js';
+import { LIMITS, SOURCES, LIMITS_AS_OF } from './limits.js';
 import * as deep from './deeplink.js';
+import { linksFor } from './deeplink.js';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
@@ -26,7 +30,7 @@ export function buildState() {
   const projects = loadProjects();
   const asks = loadAsks().filter((a) => !a.resolved);
 
-  // Claude Code has its own scheduler; show those tasks beside Orrery's agenda
+  // Claude Code has its own scheduler; show those tasks beside Sundust's agenda
   // so one screen answers "what runs on its own?" regardless of which fired it.
   const { byProject: claudeTasks, loose: looseTasks } = attachToProjects(claudeScheduledTasks(), projects);
 
@@ -67,11 +71,19 @@ export function buildState() {
     else if (runs[0]?.state === 'running') status = 'working';
     else if (runs[0] && runs[0].ok === false) status = 'failed';
 
+    const stage = stageOf({ status, lastActivity, sessionCount: ss.length, runCount: runs.length });
+    const L = linksFor(p.harness);
+    const withLinks = ss.map((s) => ({ ...s, link: L.resume(s.id) }));
+
     return {
       ...p,
+      harness: p.harness || DEFAULT_HARNESS,
       exists: fs.existsSync(p.path),
       status,
-      sessions: ss,
+      stage: stage.id,
+      stageLabel: stage.label,
+      stageBlurb: stage.blurb,
+      sessions: withLinks,
       sessionCount: ss.length,
       liveCount: live.length,
       needsInputCount: needsInput.length,
@@ -80,17 +92,22 @@ export function buildState() {
       lastActivity: lastActivity || p.createdAt || 0,
       tokens,
       costUsd: cost,
+      links: {
+        canDeepLink: L.canDeepLink,
+        open: L.open(p.path),
+        reveal: `file://${p.path}`
+      },
       agenda: [
-        ...(p.agenda || []).map((a) => ({ ...a, source: 'orrery', human: describeCron(a.schedule) })),
+        ...(p.agenda || []).map((a) => ({ ...a, source: 'sundust', human: describeCron(a.schedule) })),
         ...(claudeTasks.get(p.id) || []).map((t) => ({ ...t, human: t.schedule ? describeCron(t.schedule) : 'manual' }))
       ]
     };
   });
 
-  const rank = { blocked: 0, waiting: 1, working: 2, failed: 3, idle: 4 };
+  const stageRank = Object.fromEntries(stageList().map((s, i) => [s.id, i]));
   enriched.sort((a, b) =>
     (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
-    rank[a.status] - rank[b.status] ||
+    stageRank[a.stage] - stageRank[b.stage] ||
     b.lastActivity - a.lastActivity
   );
 
@@ -110,7 +127,15 @@ export function buildState() {
     projects: enriched,
     candidates: discoverCandidates(sessions),
     templates: templateList(),
-    asks,
+    stages: stageList(),
+    harnesses: harnessList(),
+    limits: LIMITS,
+    limitSources: SOURCES,
+    limitsAsOf: LIMITS_AS_OF,
+    asks: asks.map((a) => {
+      const proj = projects.find((p) => p.id === a.projectId);
+      return { ...a, link: linksFor(proj?.harness).resume(a.sessionId) };
+    }),
     runs: allRuns,
     activeRuns: activeRunCount(),
     unassignedSessions: unassigned.slice(0, 20),
@@ -179,7 +204,7 @@ export function createServer() {
       if (url.pathname === '/api/project' && req.method === 'POST') {
         const b = await body(req);
         if (!b.name) return send(400, { error: 'name required' });
-        const out = scaffold({ name: b.name, template: b.template, autonomy: b.autonomy, root: b.root });
+        const out = scaffold({ name: b.name, template: b.template, autonomy: b.autonomy, harness: b.harness, root: b.root });
         broadcast();
         return send(200, {
           project: out.project,
@@ -191,7 +216,7 @@ export function createServer() {
       if (url.pathname === '/api/adopt' && req.method === 'POST') {
         const b = await body(req);
         if (!b.dir) return send(400, { error: 'dir required' });
-        const p = adopt({ dir: b.dir, name: b.name, template: b.template, autonomy: b.autonomy });
+        const p = adopt({ dir: b.dir, name: b.name, template: b.template, autonomy: b.autonomy, harness: b.harness });
         broadcast();
         return send(200, { project: p });
       }

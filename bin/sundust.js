@@ -61,7 +61,7 @@ switch (cmd) {
     const server = createServer();
     server.listen(port, '127.0.0.1', () => {
       const url = `http://127.0.0.1:${port}`;
-      console.log(`\n  ${C.b('Orrery')} ${C.dim('· mission control')}\n  ${C.c(url)}\n`);
+      console.log(`\n  ${C.b('Sundust')} ${C.dim('· mission control')}\n  ${C.c(url)}\n`);
       if (cmd === 'up') {
         startScheduler(server);
         console.log(C.dim('  scheduler running — autonomous agenda tasks will fire on their cron\n'));
@@ -74,14 +74,14 @@ switch (cmd) {
   }
 
   case 'daemon': {
-    console.log(C.b('Orrery scheduler') + C.dim(' — ctrl-c to stop'));
+    console.log(C.b('Sundust scheduler') + C.dim(' — ctrl-c to stop'));
     startScheduler(null);
     break;
   }
 
   case 'new': {
     const name = args.slice(1).filter((a) => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--template' && args[args.indexOf(a) - 1] !== '--autonomy').join(' ');
-    if (!name) { console.error('usage: orrery new <name> [--template blank|finance|recipes|fitness|journal] [--autonomy off|read|edit]'); process.exit(1); }
+    if (!name) { console.error('usage: sundust new <name> [--template blank|finance|recipes|fitness|journal] [--autonomy off|read|edit]'); process.exit(1); }
     const template = flag('template', 'blank');
     if (!TEMPLATES[template]) { console.error(`unknown template "${template}". options: ${Object.keys(TEMPLATES).join(', ')}`); process.exit(1); }
     const { project, seed } = scaffold({ name, template, autonomy: flag('autonomy', 'read') });
@@ -103,7 +103,7 @@ switch (cmd) {
     const dir = path.resolve(args[2] || '');
     const project = loadProjects().find((x) => x.name.toLowerCase().includes(q) || x.path.toLowerCase().includes(q));
     if (!project) { console.error(`no project matching "${q}"`); process.exit(1); }
-    if (!args[2]) { console.error('usage: orrery relocate <match> <new-dir>'); process.exit(1); }
+    if (!args[2]) { console.error('usage: sundust relocate <match> <new-dir>'); process.exit(1); }
     const from = project.path;
     const p = relocate(project.id, dir);
     console.log(`  ${p.emoji} ${C.b(p.name)}`);
@@ -116,7 +116,7 @@ switch (cmd) {
   case 'status': {
     const s = buildState();
     if (!s.projects.length) {
-      console.log(`\n  ${C.dim('no projects yet.')}  ${C.b('orrery new "My tool"')}  or  ${C.b('orrery up')}\n`);
+      console.log(`\n  ${C.dim('no projects yet.')}  ${C.b('sundust new "My tool"')}  or  ${C.b('sundust up')}\n`);
       if (s.candidates.length) {
         console.log(C.dim('  folders with Claude sessions you could adopt:'));
         for (const c of s.candidates.slice(0, 8)) console.log(`    ${C.dim('·')} ${c.name} ${C.dim(c.path)}`);
@@ -183,7 +183,7 @@ switch (cmd) {
     done.then((r) => {
       console.log(r.ok ? C.g('\n  ✓ done') : C.r('\n  ✗ failed'));
       console.log(`  ${(r.summary || r.error || '').slice(0, 1200).split('\n').join('\n  ')}`);
-      if (r.question) console.log(`\n  ${C.m('NEEDS INPUT')} ${r.question}\n  ${C.dim('resume with:')} orrery next`);
+      if (r.question) console.log(`\n  ${C.m('NEEDS INPUT')} ${r.question}\n  ${C.dim('resume with:')} sundust next`);
       console.log(C.dim(`\n  session ${sessionId}\n`));
     });
     break;
@@ -191,7 +191,7 @@ switch (cmd) {
 
   default:
     console.log(`
-  ${C.b('orrery')} — mission control for your Claude Code projects
+  ${C.b('sundust')} — mission control for your Claude Code projects
 
     ${C.b('up')}                 serve the dashboard + run the scheduler
     ${C.b('serve')}              dashboard only
@@ -200,7 +200,7 @@ switch (cmd) {
     ${C.b('new')} <name>         scaffold a project and open Claude in it
                        ${C.dim('--template blank|finance|recipes|fitness|journal')}
                        ${C.dim('--autonomy off|read|edit')}
-    ${C.b('adopt')} [dir]        bring an existing folder into Orrery
+    ${C.b('adopt')} [dir]        bring an existing folder into Sundust
     ${C.b('relocate')} <m> <dir>  point a project at a folder you moved
     ${C.b('ls')} [--v]           list projects and status
     ${C.b('next')}               jump to whatever is waiting on you

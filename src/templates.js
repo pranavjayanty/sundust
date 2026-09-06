@@ -4,9 +4,9 @@
 
 const common = (name) => `# ${name}
 
-## Working agreement with Orrery
+## Working agreement with Sundust
 
-This project is monitored by Orrery, which runs scheduled autonomous sessions here.
+This project is monitored by Sundust, which runs scheduled autonomous sessions here.
 
 - Keep durable state in \`data/\` as plain files (JSON / JSONL / Markdown). No database.
 - Keep a running log in \`NOTES.md\`: what changed, what you decided, what is still open.
@@ -16,7 +16,7 @@ This project is monitored by Orrery, which runs scheduled autonomous sessions he
 
   NEEDS INPUT: <the single question, self-contained>
 
-  Orrery watches for that line and surfaces it as a card the human can answer in
+  Sundust watches for that line and surfaces it as a card the human can answer in
   one click. One question per run; pick the most blocking one.
 - If nothing needed doing, say so in one line. Do not invent busywork.
 `;
@@ -26,7 +26,7 @@ export const TEMPLATES = {
     label: 'Blank',
     emoji: '◇',
     accent: '#8b9bb4',
-    blurb: 'An empty project wired into Orrery.',
+    blurb: 'An empty project wired into Sundust.',
     dirs: ['data'],
     claudeMd: (n) => common(n),
     seed: (n) => `This is a brand new project called "${n}". Read CLAUDE.md, then ask me what I want to build here — keep it to a few sharp questions, then scaffold a first version.`,

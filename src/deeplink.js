@@ -1,33 +1,24 @@
-// Deep links understood by the Claude desktop app.
-//   claude://code/new?folder=<abs path>&prompt=<text>[&file=<abs path>]
-//   claude://code/continue?session=local_<uuid> | last
-//   claude://code/needs-input[?session=local_<uuid>]
-// The desktop app truncates the prompt at 14336 characters.
+import { getHarness, DEFAULT_HARNESS } from './harnesses.js';
 
-export const PROMPT_LIMIT = 14336;
+/**
+ * Links that put a session one click away. Only harnesses that register a URL
+ * scheme can do this; the rest return null and the UI falls back to revealing
+ * the folder. Claude Code's desktop app registers claude://.
+ */
+export const linksFor = (harnessId = DEFAULT_HARNESS) => {
+  const h = getHarness(harnessId);
+  const d = h.deeplink;
+  return {
+    harness: h.id,
+    canDeepLink: Boolean(d),
+    open: (folder, prompt) => (d ? d.open(folder, prompt) : `file://${folder}`),
+    resume: (id) => (d ? d.resume(id) : null),
+    attention: () => (d?.attention ? d.attention() : null)
+  };
+};
 
-const q = (s) => encodeURIComponent(String(s));
-
-export function newSession({ folder, prompt, files = [] } = {}) {
-  const parts = [];
-  if (prompt) parts.push(`prompt=${q(String(prompt).slice(0, PROMPT_LIMIT))}`);
-  if (folder) parts.push(`folder=${q(folder)}`);
-  for (const f of files) parts.push(`file=${q(f)}`);
-  parts.push('source=orrery');
-  return `claude://code/new?${parts.join('&')}`;
-}
-
-// Session ids on disk are bare uuids; the desktop app expects a `local_` prefix.
-export function sessionRef(id) {
-  if (!id) return 'last';
-  return String(id).startsWith('local_') ? String(id) : `local_${id}`;
-}
-
-export function continueSession(id) {
-  return `claude://code/continue?session=${q(sessionRef(id))}&source=orrery`;
-}
-
-export function needsInput(id) {
-  const s = id ? `session=${q(sessionRef(id))}&` : '';
-  return `claude://code/needs-input?${s}source=orrery`;
-}
+// Kept for the CLI, which is Claude Code only today.
+const claude = linksFor('claude-code');
+export const newSession = ({ folder, prompt } = {}) => claude.open(folder, prompt);
+export const continueSession = (id) => claude.resume(id);
+export const needsInput = () => claude.attention();

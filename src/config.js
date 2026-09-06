@@ -7,16 +7,16 @@ export const CLAUDE_DIR = path.join(HOME, '.claude');
 export const CLAUDE_PROJECTS = path.join(CLAUDE_DIR, 'projects');
 export const CLAUDE_SESSIONS = path.join(CLAUDE_DIR, 'sessions');
 
-export const ORRERY_DIR = process.env.ORRERY_HOME || path.join(HOME, '.orrery');
-export const REGISTRY = path.join(ORRERY_DIR, 'projects.json');
-export const INDEX_CACHE = path.join(ORRERY_DIR, 'index.json');
-export const RUNS_DIR = path.join(ORRERY_DIR, 'runs');
-export const ASKS = path.join(ORRERY_DIR, 'asks.json');
-export const SETTINGS = path.join(ORRERY_DIR, 'settings.json');
+export const SUNDUST_DIR = process.env.SUNDUST_HOME || path.join(HOME, '.sundust');
+export const REGISTRY = path.join(SUNDUST_DIR, 'projects.json');
+export const INDEX_CACHE = path.join(SUNDUST_DIR, 'index.json');
+export const RUNS_DIR = path.join(SUNDUST_DIR, 'runs');
+export const ASKS = path.join(SUNDUST_DIR, 'asks.json');
+export const SETTINGS = path.join(SUNDUST_DIR, 'settings.json');
 
 export const DEFAULT_SETTINGS = {
   port: 4173,
-  // Where `orrery new` creates project folders.
+  // Where `sundust new` creates project folders.
   workspaceRoot: path.join(HOME, 'Documents', 'code'),
   claudeBin: 'claude',
   // Daemon refuses to auto-run in a project that has a live interactive session.
@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 export function ensureDirs() {
-  for (const d of [ORRERY_DIR, RUNS_DIR]) fs.mkdirSync(d, { recursive: true });
+  for (const d of [SUNDUST_DIR, RUNS_DIR]) fs.mkdirSync(d, { recursive: true });
 }
 
 export function readJSON(file, fallback) {
