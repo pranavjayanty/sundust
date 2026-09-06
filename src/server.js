@@ -13,7 +13,7 @@ import {
   recentRuns, listRuns, loadAsks, resolveAsk, runTask, tick, describeCron, nextFire, activeRunCount
 } from './autonomy.js';
 import { claudeScheduledTasks, attachToProjects } from './claude-tasks.js';
-import { stageOf, stageList } from './stages.js';
+import { stateOf, stateList } from './states.js';
 import { harnessList, DEFAULT_HARNESS } from './harnesses.js';
 import { readUsage } from './usage.js';
 import { linksFor } from './deeplink.js';
@@ -75,7 +75,16 @@ export function buildState() {
     else if (runs[0]?.state === 'running') status = 'working';
     else if (runs[0] && runs[0].ok === false) status = 'failed';
 
-    const stage = stageOf({ status, lastActivity, sessionCount: ss.length, runCount: runs.length });
+    const agenda = [
+      ...(p.agenda || []).map((a) => ({
+        ...a, source: 'sundust',
+        human: describeCron(a.schedule),
+        nextAt: a.enabled && p.autonomy !== 'off' ? nextFire(a.schedule) : null
+      })),
+      ...(claudeTasks.get(p.id) || []).map((t) => ({ ...t, human: t.schedule ? describeCron(t.schedule) : 'manual' }))
+    ];
+    const nextAt = agenda.reduce((m, a) => (a.nextAt && (!m || a.nextAt < m) ? a.nextAt : m), null);
+    const state = stateOf({ status, hasSchedule: Boolean(nextAt) });
     const L = linksFor(p.harness);
     const withLinks = ss.map((s) => ({ ...s, link: L.resume(s.id) }));
 
@@ -84,9 +93,10 @@ export function buildState() {
       harness: p.harness || DEFAULT_HARNESS,
       exists: fs.existsSync(p.path),
       status,
-      stage: stage.id,
-      stageLabel: stage.label,
-      stageBlurb: stage.blurb,
+      state: state.id,
+      stateLabel: state.label,
+      tone: state.tone,
+      nextAt,
       sessions: withLinks,
       sessionCount: ss.length,
       liveCount: live.length,
@@ -102,23 +112,12 @@ export function buildState() {
         open: L.open(p.path),
         reveal: `file://${p.path}`
       },
-      agenda: [
-        ...(p.agenda || []).map((a) => ({
-          ...a, source: 'sundust',
-          human: describeCron(a.schedule),
-          nextAt: a.enabled && p.autonomy !== 'off' ? nextFire(a.schedule) : null
-        })),
-        ...(claudeTasks.get(p.id) || []).map((t) => ({ ...t, human: t.schedule ? describeCron(t.schedule) : 'manual' }))
-      ]
+      agenda
     };
   });
 
-  const stageRank = Object.fromEntries(stageList().map((s, i) => [s.id, i]));
-  enriched.sort((a, b) =>
-    (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
-    stageRank[a.stage] - stageRank[b.stage] ||
-    b.lastActivity - a.lastActivity
-  );
+  const rank = Object.fromEntries(stateList().map((s, i) => [s.id, i]));
+  enriched.sort((a, b) => rank[a.state] - rank[b.state] || b.lastActivity - a.lastActivity);
 
   // The standalone `claude` binary authenticates separately from the desktop app.
   // If it cannot, every scheduled run fails the same way — say so once, loudly.
@@ -136,7 +135,7 @@ export function buildState() {
     projects: enriched,
     candidates: discoverCandidates(sessions),
     templates: templateList(),
-    stages: stageList(),
+    states: stateList(),
     harnesses: harnessList(),
     usage: readUsage(),
     asks: asks.map((a) => {

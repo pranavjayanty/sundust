@@ -3,9 +3,8 @@
 Mission control for the projects you run with a coding agent. Local-first, no
 account, no cloud.
 
-Every project is a star, and its stage is its state. Distance and colour are
-temperature — how recently it burned. A project that needs you **flares**, and
-you can see that from across the room.
+A single screen that answers "what needs me, what is running, what broke" and
+gets you into the session in one click.
 
 ```bash
 node bin/sundust.js up
@@ -13,24 +12,45 @@ node bin/sundust.js up
 
 Serves the dashboard on `http://127.0.0.1:4173` and starts the scheduler.
 
-## Stellar stages
+## The console
 
-The metaphor does real work. A star's colour is its temperature; here temperature
-is recency. Fresh work burns white-gold, cools to orange, and ends as dim ash.
+The page leads with whichever state you are in, because at any scale the only
+question that matters first is *is anything on me right now*.
 
-| Stage | Colour | Means |
-|---|---|---|
-| **Flare** | gold | Waiting on you — a run stopped on a question, or a live session is at the prompt |
-| **Supernova** | coral | The last unattended run failed |
-| **Main sequence** | amber | Burning steadily; live session or a run in flight |
-| **Protostar** | orange | Registered, nothing has run here yet |
-| **Red giant** | deep orange | Plenty of history, quiet for a while |
-| **White dwarf** | ash | Untouched for over a month |
+- **Something is on you** — that block owns the top of the screen: who, what,
+  and a Resume button that lands you in the exact session. Everything else
+  recedes.
+- **Nothing is on you** — it collapses to one line saying what runs next, and
+  the numbers take over.
 
-The field lays projects out like an HR diagram: horizontal is temperature
-(recency), vertical is luminosity (how much work is in it). Each is drawn as the
-star it currently is — protostars are diffuse and unignited, red giants swollen
-and cool, flares throw prominences off the limb.
+Below that: five counters (needs you / running / scheduled / failed / projects,
+each one a filter), your plan usage, and the roster.
+
+The roster is a **table, not cards**. Cards stop working somewhere around eight
+projects; a dense sortable table still works at forty. Rows group by state,
+sort by any column, filter by name or path, and the whole row is one click into
+the session that wants you.
+
+Amber is the brand and the one attention colour. Everything else stays neutral
+until it has something to say. Numerics are monospace so columns line up when
+you scan. Light and dark are both real themes built from the same tokens —
+toggle in the header, with `t`, or from the palette.
+
+The quiet line-work behind the header state is generated, not drawn: a flow
+field when something needs you, still concentric rings when nothing does. It is
+procedural SVG in the [Book of Shapes](https://bookofshapes.com) idiom — many
+fine strokes, one colour, no fill — kept under 20% opacity so it never competes
+with the data.
+
+## States
+
+| State | Means |
+|---|---|
+| **Needs you** | A run stopped on a question, or a live session is waiting at the prompt |
+| **Failed** | The last unattended run ended in an error |
+| **Running** | A live session or headless run is working right now |
+| **Scheduled** | Nothing running, but agenda tasks will fire on their own |
+| **Idle** | Nothing running and nothing scheduled |
 
 ## The three things it does
 
@@ -171,7 +191,7 @@ sundust run <match> [task] run an agenda task now, headless
 src/config.js      paths, settings
 src/harnesses.js   harness definitions       ← add a harness here
 src/usage.js       plan usage, read from the desktop app's own record
-src/stages.js      stellar stage mapping
+src/states.js      project state mapping
 src/scan.js        incremental transcript indexer + live-process detection
 src/projects.js    registry, scaffolding, relocation, auto-discovery
 src/templates.js   project templates         ← add your own here
@@ -179,7 +199,8 @@ src/autonomy.js    cron, headless runner, NEEDS INPUT parsing
 src/claude-tasks.js reads Claude Code's own scheduler
 src/deeplink.js    harness-aware links
 src/server.js      HTTP API + SSE
-web/               vanilla dashboard, no build step
+web/shapes.js      generative SVG texture (flow fields, rings)
+web/               vanilla console, no build step
 ```
 
 When a project folder moves, `sundust relocate` records the old path as an alias.
