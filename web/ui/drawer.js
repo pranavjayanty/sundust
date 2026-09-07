@@ -65,7 +65,7 @@ function build() {
   const keep = body.scrollTop;
   clear(body);
   body.append(
-    secAsks(p, s), secSessions(p), secAgenda(p), secRuns(p), secNotes(p), secSettings(p, s)
+    secAsks(p, s), secSessions(p), secAgenda(p), secRuns(p), secEvents(p, s), secNotes(p), secSettings(p, s)
   );
   body.scrollTop = keep;
   loadNotes(p);
@@ -398,6 +398,31 @@ function secRuns(p) {
   return sec;
 }
 
+/* --------------------------------------------------------------- events
+   Cross-project handoffs: a run ends with EMIT: <event> <context>, and every
+   project that listens for that event gets a run. The server did this from
+   the start; the console never showed it or let you subscribe. */
+function secEvents(p, s) {
+  const subs = p.subscribes || [];
+  const mine = (s.events || []).filter((e) => e.fromProject === p.id || subs.includes(e.event));
+  if (!mine.length && !subs.length) return el('span');   // nothing to say, no section
+  const sec = section('Events', mine.length ? plural(mine.length, 'recent') : '');
+  if (subs.length) sec.append(el('div', 'none', `Listens for: ${subs.join(', ')}`));
+  for (const e of mine.slice(0, 12)) {
+    const box = el('div', 'run');
+    const top = el('div', 'rtop');
+    top.append(el('b', null, `${e.fromProject === p.id ? '↗' : '↘'} ${e.event}`));
+    top.append(el('span', 'ok', e.consumed ? 'handled' : 'pending'), el('span', 'when', `${ago(e.at)} ago`));
+    box.append(top);
+    const meta = el('div', 'rmeta');
+    meta.append(el('span', null, e.fromProject === p.id ? 'raised here' : `from ${e.fromName}`));
+    if (e.context) meta.append(el('span', null, firstLine(e.context, 120)));
+    box.append(meta);
+    sec.append(box);
+  }
+  return sec;
+}
+
 /* ---------------------------------------------------------------- notes */
 function secNotes(p) {
   const sec = section('Notes', p.notes ? plural(p.notes, 'line') : '');
@@ -440,6 +465,23 @@ function secSettings(p, s) {
     g.append(el('span', 'k', ''), elx('span', 'v', 'Not a git repository: edits here cannot be checkpointed or reverted.',
       { style: 'color:var(--bad)' }));
   }
+
+  // which events fire a run here
+  g.append(el('span', 'k', 'Listens for'));
+  const subs = elx('input', 'input', null, { placeholder: 'event names, comma-separated',
+    title: 'When another project ends a run with EMIT: <event> …, a run starts here with its context',
+    'aria-label': 'Events this project listens for' });
+  subs.value = drafts.get(`subs:${p.id}`) ?? (p.subscribes || []).join(', ');
+  subs.oninput = () => drafts.set(`subs:${p.id}`, subs.value);
+  const commit = () => {
+    const list = subs.value.split(',').map((x) => x.trim()).filter(Boolean);
+    if (JSON.stringify(list) === JSON.stringify(p.subscribes || [])) return;
+    drafts.delete(`subs:${p.id}`);
+    patch(p, { subscribes: list });
+  };
+  subs.onblur = commit;
+  subs.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } };
+  g.append(subs);
 
   g.append(el('span', 'k', 'Harness'), el('span', 'v', s.harnesses.find((h) => h.id === p.harness)?.label || p.harness));
   g.append(el('span', 'k', 'Folder'), el('span', 'v', p.path));

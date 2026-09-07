@@ -4,11 +4,16 @@
   "private": true,
   "description": "Local-first mission control for your Claude Code projects.",
   "type": "module",
-  "bin": { "sundust": "./bin/sundust.js" },
+  "bin": {
+    "sundust": "./bin/sundust.js"
+  },
   "scripts": {
     "start": "node bin/sundust.js up",
     "serve": "node bin/sundust.js serve",
-    "daemon": "node bin/sundust.js daemon"
+    "daemon": "node bin/sundust.js daemon",
+    "test": "node --test test/*.test.js"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

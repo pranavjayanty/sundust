@@ -12,6 +12,17 @@ node bin/sundust.js up
 
 Serves the dashboard on `http://127.0.0.1:4173` and starts the scheduler.
 
+That scheduler stops when the terminal closes. To make "runs while you are
+away" actually true:
+
+```bash
+node bin/sundust.js install     # starts at login, restarts if it dies, logs to ~/.sundust/log
+node bin/sundust.js service     # is it installed and running?
+node bin/sundust.js logs        # the last 80 lines
+```
+
+`sundust uninstall` removes it. macOS (launchd) for now.
+
 ## The console
 
 One screen, no hero block. It opens with the answer in a sentence — *"Nothing
@@ -303,7 +314,8 @@ src/templates.js   project templates         ← add your own here
 src/autonomy.js    cron, headless runner, NEEDS INPUT parsing
 src/claude-tasks.js reads Claude Code's own scheduler
 src/deeplink.js    harness-aware links
-src/server.js      HTTP API + SSE
+src/server.js      HTTP API + SSE, request guard
+src/service.js     launchd login service: install, status, logs
 web/field.js       full-viewport line field with pointer gravity
 web/marks.js       small reactive marks (dots, rings, hatch)
 web/app.js         wiring: boot, update loop, global keys
@@ -390,6 +402,41 @@ rather than its timestamp — a hollow entry (`accessToken: ""`) reads as
 "present" while being useless. Deleting the Keychain item
 (`security delete-generic-password -s "Claude Code-credentials"`) and signing in
 again clears that state.
+
+## The local API is not open to the web
+
+The server binds to `127.0.0.1`, which keeps other machines out and does
+nothing about the browser on this one: any page you have open can send a
+request to localhost, and a `text/plain` POST needs no preflight. Before this
+was closed, a page could `PATCH /api/project` with a `bin` of its choosing and
+then `POST /api/run`.
+
+Three checks in `src/server.js` close it. The `Host` header must be a loopback
+name (defeats DNS rebinding). Anything that mutates must be JSON and carry an
+`x-sundust-client` header — a custom header forces a preflight, and the
+preflight is answered with no CORS grant. And `PATCH /api/project` and
+`/api/settings` accept only the fields a browser may change: `bin`, `path` and
+`bins` are set from the CLI or `settings.json`, never over HTTP.
+
+Calling the API from a script:
+
+```bash
+curl -X POST http://127.0.0.1:4173/api/run \
+  -H 'content-type: application/json' -H 'x-sundust-client: 1' \
+  -d '{"projectId":"…","prompt":"…"}'
+```
+
+## Tests
+
+```bash
+npm test
+```
+
+`node --test`, no dependencies. The suite that matters is
+`test/checkpoint.test.js`: a run edits a file and creates another, you then
+edit the first one yourself, and revert must restore the second and refuse the
+first. The API suite proves the request guard above. Everything runs against a
+throwaway `SUNDUST_HOME`.
 
 ## Requirements
 

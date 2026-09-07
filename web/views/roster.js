@@ -298,12 +298,39 @@ function rowKeys(e, row, go) {
   }
 }
 
+/** First run. Four things have to be true before the product works; say which are. */
+export function setupChecklist(s) {
+  const auth = (s.auth || [])[0];
+  const svc = s.service || {};
+  const items = [
+    { ok: Boolean(auth?.known), label: auth?.known ? `${auth.label} found` : 'Harness not found',
+      why: auth?.known ? `\`${auth.bin}\` is on your PATH` : 'Install Claude Code, or set its path in ~/.sundust/settings.json under bins' },
+    { ok: Boolean(auth?.ok), label: auth?.ok ? 'Signed in' : 'Not signed in',
+      why: auth?.ok ? `via ${auth.method || 'the harness'}` : 'Run `claude` once and sign in' },
+    { ok: Boolean(auth?.token?.has), label: auth?.token?.has ? 'Long-lived token stored' : 'No long-lived token',
+      why: auth?.token?.has ? 'Unattended runs work from any shell' : 'Run `claude setup-token`, then `sundust auth` — without it runs die when your session token expires' },
+    { ok: Boolean(svc.installed), label: svc.installed ? (svc.running ? 'Runs at login' : 'Login service installed, not running') : 'Not installed as a login service',
+      why: svc.installed ? 'The scheduler survives closing this terminal' : 'Run `sundust install` — otherwise nothing runs once this terminal closes' },
+    { ok: s.projects.length > 0, label: s.projects.length ? plural(s.projects.length, 'project') : 'No projects yet',
+      why: s.projects.length ? '' : 'Create one, or track a folder you already use' }
+  ];
+  const list = el('ol', 'setup');
+  for (const it of items) {
+    const li = el('li', it.ok ? 'ok' : '');
+    li.append(el('i', null, it.ok ? '✓' : '○'), el('b', null, it.label));
+    if (it.why) li.append(el('span', null, it.why));
+    list.append(li);
+  }
+  return list;
+}
+
 function emptyState(s) {
   const e = el('div', 'empty');
   if (!s.projects.length) {
-    e.append(el('h3', null, 'No projects yet'));
+    e.append(el('h3', null, 'Nothing tracked yet'));
     e.append(el('p', null,
-      'Create one and Sundust scaffolds the folder, briefs the agent, and runs its agenda on a schedule.'));
+      'Sundust watches the projects you run with a coding agent, keeps them moving on a schedule, and shows you what needs you. Here is where it stands:'));
+    e.append(setupChecklist(s));
     const b = elx('button', 'btn solid', 'New project', { type: 'button' });
     b.onclick = () => document.querySelector('#btn-new').click();
     e.append(b);

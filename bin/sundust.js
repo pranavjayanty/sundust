@@ -10,6 +10,7 @@ import { TEMPLATES } from '../src/templates.js';
 import * as deep from '../src/deeplink.js';
 import { setToken, clearToken, hasToken, storedHarnesses, credentialsPath, tokenVarFor } from '../src/credentials.js';
 import { preflight, authBlocker, tokenAdvice } from '../src/preflight.js';
+import * as service from '../src/service.js';
 
 const C = {
   dim: (s) => `\x1b[2m${s}\x1b[0m`, b: (s) => `\x1b[1m${s}\x1b[0m`,
@@ -251,6 +252,38 @@ switch (cmd) {
     break;
   }
 
+  case 'install': {
+    try {
+      const { plist, log } = service.install({ port: flag('port', null) });
+      console.log(`\n  ${C.g('✓')} Sundust now starts at login and restarts if it dies.`);
+      console.log(C.dim(`    agent   ${plist}\n    log     ${log}\n    dashboard  http://127.0.0.1:${flag('port', getSettings().port)}\n`));
+      console.log(C.dim('  If you also run `sundust up` in a terminal, the two will fight over the port — stop one.\n'));
+    } catch (e) { console.error(C.r(`  ${e.message}`)); process.exit(1); }
+    break;
+  }
+
+  case 'uninstall': {
+    const { removed } = service.uninstall();
+    console.log(removed ? `  ${C.g('✓')} login service removed` : C.dim('  no login service was installed'));
+    break;
+  }
+
+  case 'service': {
+    const st = service.status();
+    if (!st.supported) { console.log(C.dim('  login service is macOS only for now')); break; }
+    console.log(st.installed
+      ? (st.running ? `  ${C.g('●')} installed and running ${C.dim(`(pid ${st.pid})`)}` : `  ${C.y('○')} installed but not running — try ${C.b('sundust logs')}`)
+      : `  ${C.dim('○')} not installed — ${C.b('sundust install')} makes it start at login`);
+    console.log(C.dim(`    ${st.plist}\n    ${st.log}`));
+    break;
+  }
+
+  case 'logs': {
+    const out = service.tailLog(Number(flag('n', 80)));
+    console.log(out || C.dim(`  no log yet at ${service.LOG_FILE}`));
+    break;
+  }
+
   default:
     console.log(`
   ${C.b('sundust')} — mission control for your Claude Code projects
@@ -258,6 +291,9 @@ switch (cmd) {
     ${C.b('up')}                 serve the dashboard + run the scheduler
     ${C.b('serve')}              dashboard only
     ${C.b('daemon')}             scheduler only
+    ${C.b('install')}            run at login and restart if it dies (launchd)
+                       ${C.dim('--port N · then `sundust service` and `sundust logs`')}
+    ${C.b('uninstall')}          remove the login service
 
     ${C.b('new')} <name>         scaffold a project and open Claude in it
                        ${C.dim('--template blank|finance|recipes|fitness|journal')}

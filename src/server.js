@@ -20,6 +20,7 @@ import { readUsage } from './usage.js';
 import { isRepo } from './checkpoint.js';
 import { preflight, authBlocker, tokenAdvice } from './preflight.js';
 import { linksFor } from './deeplink.js';
+import { cachedStatus as serviceStatus } from './service.js';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
@@ -180,6 +181,7 @@ export function buildState() {
     events: readEvents().slice(-20).reverse(),
     authWarning: authWarn,
     auth,
+    service: serviceStatus(),
     projects: enriched,
     candidates: discoverCandidates(sessions),
     templates: templateList(),
@@ -204,6 +206,32 @@ export function buildState() {
     }
   };
 }
+
+/* Request guard.
+
+   Binding to 127.0.0.1 keeps other machines out; it does nothing about the
+   browser on this one, which will happily send a request to localhost from any
+   page you have open. A text/plain POST needs no preflight, so before this a
+   web page could PATCH a project's `bin` to any executable and then POST
+   /api/run. Three checks close that:
+
+   - Host must be a loopback name, which defeats DNS rebinding.
+   - Anything that mutates must be JSON and carry x-sundust-client. A custom
+     header forces a preflight, and the preflight gets no CORS answer.
+   - OPTIONS is answered with nothing, so no page ever gets permission. */
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+const MUTATING = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
+const hostOk = (req) => LOCAL_HOSTS.has(String(req.headers.host || '').replace(/:\d+$/, ''));
+const clientOk = (req) => req.headers['x-sundust-client'] === '1'
+  && /^application\/json\b/i.test(String(req.headers['content-type'] || ''));
+
+/* Fields a browser may change. `bin` and `path` are deliberately absent: the
+   first is a command that gets executed, the second is where it runs. Both are
+   set from the CLI or the settings file, never over HTTP. */
+const PROJECT_FIELDS = ['name', 'autonomy', 'pinned', 'archived', 'agenda', 'subscribes', 'model', 'extraDirs'];
+const SETTINGS_FIELDS = ['autonomyEnabled', 'maxConcurrentRuns', 'runTimeoutMs', 'respectLiveSessions', 'budget', 'workspaceRoot'];
+const AUTONOMY = new Set(['off', 'read', 'edit']);
+const pick = (obj, keys) => Object.fromEntries(keys.filter((k) => k in obj).map((k) => [k, obj[k]]));
 
 const body = (req) =>
   new Promise((resolve) => {
@@ -235,6 +263,12 @@ export function createServer() {
     };
 
     try {
+      if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+      if (!hostOk(req)) return send(403, { error: 'refused: the request did not come from this machine' });
+      if (MUTATING.has(req.method) && !clientOk(req)) {
+        return send(403, { error: 'refused: changes must be JSON and carry the x-sundust-client header' });
+      }
+
       // ---- live update stream
       if (url.pathname === '/api/stream') {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
@@ -287,7 +321,13 @@ export function createServer() {
       if (url.pathname === '/api/project' && req.method === 'PATCH') {
         const b = await body(req);
         if (!b.id) return send(400, { error: 'id required' });
-        upsertProject(b);
+        if (!loadProjects().some((p) => p.id === b.id)) return send(404, { error: 'no such project' });
+        const patch = pick(b, PROJECT_FIELDS);
+        if ('autonomy' in patch && !AUTONOMY.has(patch.autonomy)) return send(400, { error: 'autonomy must be off, read or edit' });
+        if ('agenda' in patch && !Array.isArray(patch.agenda)) return send(400, { error: 'agenda must be a list' });
+        if ('subscribes' in patch && !Array.isArray(patch.subscribes)) return send(400, { error: 'subscribes must be a list' });
+        if ('name' in patch && !String(patch.name || '').trim()) return send(400, { error: 'name cannot be empty' });
+        upsertProject({ id: b.id, ...patch });
         broadcast();
         return send(200, { ok: true });
       }
@@ -343,7 +383,7 @@ export function createServer() {
 
       if (url.pathname === '/api/settings' && req.method === 'PATCH') {
         const b = await body(req);
-        const next = saveSettings(b);
+        const next = saveSettings(pick(b, SETTINGS_FIELDS));
         broadcast();
         return send(200, next);
       }

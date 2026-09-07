@@ -9,6 +9,7 @@
 
 import { $, el, elx, clear, modKey } from '../lib/dom.js';
 import { store } from '../lib/store.js';
+import { setupChecklist } from '../views/roster.js';
 
 const KEYS = [
   ['⌘K / Ctrl K', 'Search projects, sessions and tasks, or run one'],
@@ -74,6 +75,7 @@ function build() {
   const host = clear($('#help-body'));
   const s = store.data;
 
+  if (s) { const sec = block('Setup', []); sec.append(setupChecklist(s)); host.append(sec); }
   host.append(block('Display', [densityRow(), fieldToggle()]));
   host.append(block('Keyboard', KEYS.map(([k, v]) => defrow(k, v, true))));
 
