@@ -106,3 +106,37 @@ export function tailLog(n = 80) {
     return lines.slice(Math.max(0, lines.length - n - 1)).join('\n');
   } catch { return ''; }
 }
+
+/* ------------------------------------------------------------- tailscale
+   The recommended way to reach the console from a phone: serve loopback over
+   your tailnet with TLS and identity, and allow that hostname. */
+const TS_CANDIDATES = ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', '/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale'];
+
+export function tailscaleBin() {
+  for (const p of TS_CANDIDATES) if (fs.existsSync(p)) return p;
+  try { return execFileSync('which', ['tailscale'], { encoding: 'utf8' }).trim() || null; } catch { return null; }
+}
+
+/** What Tailscale knows about this machine, or why it cannot say. */
+export function tailscaleStatus() {
+  const bin = tailscaleBin();
+  if (!bin) return { installed: false };
+  try {
+    const j = JSON.parse(execFileSync(bin, ['status', '--json'], { encoding: 'utf8', timeout: 8000 }));
+    const dns = String(j?.Self?.DNSName || '').replace(/\.$/, '');
+    return { installed: true, bin, backend: j?.BackendState, loggedIn: j?.BackendState === 'Running', dnsName: dns || null,
+      https: Boolean(j?.CertDomains?.length), ip: j?.TailscaleIPs?.[0] || null };
+  } catch (e) {
+    return { installed: true, bin, loggedIn: false, error: String(e?.stderr || e?.message || e).trim().split('\n')[0] };
+  }
+}
+
+/** `tailscale serve --bg <port>`: loopback → https://<dns>/ on the tailnet. */
+export function tailscaleServe(port) {
+  const st = tailscaleStatus();
+  if (!st.installed) throw new Error('Tailscale is not installed — brew install --cask tailscale, then open it and log in');
+  if (!st.loggedIn) throw new Error(`Tailscale is installed but not connected (${st.backend || st.error || 'not running'}) — open Tailscale and log in`);
+  if (!st.dnsName) throw new Error('Tailscale has no MagicDNS name for this machine — enable MagicDNS in the admin console');
+  const out = execFileSync(st.bin, ['serve', '--bg', String(port)], { encoding: 'utf8', timeout: 20000, stdio: ['ignore', 'pipe', 'pipe'] });
+  return { dnsName: st.dnsName, url: `https://${st.dnsName}/`, output: out.trim() };
+}

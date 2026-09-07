@@ -255,6 +255,31 @@ switch (cmd) {
   case 'remote': {
     const sub = args[1]; const host = (args[2] || '').replace(/^https?:\/\//, '').replace(/[/:].*$/, '').toLowerCase();
     const cur = getSettings().remoteHosts || [];
+    if (sub === 'setup') {
+      // the whole phone story in one command: serve over the tailnet, allow the name
+      const st = service.tailscaleStatus();
+      if (!st.installed) {
+        console.log(`\n  Tailscale is not installed. It needs your password (it installs a network extension), so run this yourself:\n\n    ${C.b('brew install --cask tailscale')}\n\n  then open Tailscale from Applications, log in, and run ${C.b('sundust remote setup')} again.\n`);
+        process.exit(1);
+      }
+      if (!st.loggedIn) {
+        console.log(`\n  Tailscale is installed but not connected ${C.dim(`(${st.backend || st.error || 'not running'})`)}.\n  Open Tailscale from the menu bar, log in, then run ${C.b('sundust remote setup')} again.\n`);
+        process.exit(1);
+      }
+      try {
+        const port = getSettings().port;
+        const { dnsName, url } = service.tailscaleServe(port);
+        saveSettings({ remoteHosts: [...new Set([...cur, dnsName])] });
+        console.log(`\n  ${C.g('✓')} serving the console over your tailnet\n\n    ${C.c(url)}\n`);
+        console.log(C.dim(`  Open that on a device that is on your tailnet, then “Add to Home Screen”.\n  Only ${dnsName} is allowed through; the server still binds to 127.0.0.1.\n  Undo with: tailscale serve --bg off · sundust remote remove ${dnsName}\n`));
+      } catch (e) {
+        const msg = String(e.message || e);
+        console.error(C.r(`  ${msg}`));
+        if (/HTTPS|cert/i.test(msg)) console.log(C.dim('  Enable HTTPS certificates for your tailnet: https://login.tailscale.com/admin/dns'));
+        process.exit(1);
+      }
+      break;
+    }
     if (sub === 'add' && host) {
       saveSettings({ remoteHosts: [...new Set([...cur, host])] });
       console.log(`  ${C.g('✓')} ${host} may reach the console\n  ${C.dim('serve it over your tailnet with: tailscale serve --bg ' + getSettings().port)}`);
@@ -309,6 +334,7 @@ switch (cmd) {
     ${C.b('install')}            run at login and restart if it dies (launchd)
                        ${C.dim('--port N · then `sundust service` and `sundust logs`')}
     ${C.b('uninstall')}          remove the login service
+    ${C.b('remote')} setup       serve over your tailnet and allow its name (needs Tailscale)
     ${C.b('remote')} add <host>  let a tailnet or tunnel hostname reach the console
 
     ${C.b('new')} <name>         scaffold a project and open Claude in it

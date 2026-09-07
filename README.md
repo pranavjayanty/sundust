@@ -379,11 +379,17 @@ between your own devices, with identity and TLS handled for you, and nothing
 exposed to the internet.
 
 ```bash
-# on the Mac, once
-node bin/sundust.js install                       # runs at login
-tailscale serve --bg 4173                         # https://<mac>.<tailnet>.ts.net → localhost:4173
-node bin/sundust.js remote add <mac>.<tailnet>.ts.net
+brew install --cask tailscale          # once; needs your password (network extension)
+# open Tailscale from Applications and log in, then:
+node bin/sundust.js install            # Sundust runs at login
+node bin/sundust.js remote setup       # tailscale serve --bg 4173 + allow your MagicDNS name
 ```
+
+`remote setup` finds the Tailscale CLI, serves loopback over your tailnet as
+`https://<mac>.<tailnet>.ts.net`, and adds that name to the allowlist. It says
+what is missing if Tailscale is not installed, not logged in, or the tailnet
+has no HTTPS certificates yet. By hand, the same thing is
+`tailscale serve --bg 4173` and `sundust remote add <host>`.
 
 Then open that URL on the phone (on the same tailnet) and *Add to Home
 Screen* — the console ships a manifest, so it installs as an app. Requests
