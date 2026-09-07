@@ -276,5 +276,14 @@ dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
   .tab[aria-selected=true] span:not(.count){display:inline}
   .kv{grid-template-columns:minmax(5.5rem,7.5rem) 1fr}
   .kv select.input{min-width:0;width:100%}
+  /* the primary action may shrink; the others are icons already */
+  .panel-actions .btn.primary{flex:1 1 auto;min-width:0;overflow:hidden}
+  .panel-actions .btn.primary span{overflow:hidden;text-overflow:ellipsis}
+  /* list items: text gets the full width, buttons drop to a second line —
+     otherwise the buttons column squeezes a title to one word per line */
+  .item{grid-template-columns:auto minmax(0,1fr)}
+  .item .go{grid-column:2;justify-content:flex-start}
+  .item .full,.item .reply{grid-column:1 / -1}
+  .item .body b{white-space:normal}
 }
 @media (max-width:560px){ .help-row,.field-row{grid-template-columns:1fr} }
