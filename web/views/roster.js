@@ -17,6 +17,7 @@ import { pendingFor, rowContext } from '../lib/derive.js';
 import { store, setView } from '../lib/store.js';
 import { openLink } from '../ui/links.js';
 import { openRun } from '../ui/dialogs.js';
+import { openDrawer } from '../ui/drawer.js';
 
 const COLS = [
   { key: 'name', label: 'Project', cls: 'c-name', sortable: true,
@@ -59,7 +60,10 @@ export function visibleRows(s) {
   }
   return [...rows].sort((a, b) => {
     const x = sortVal(a, sortBy, s), y = sortVal(b, sortBy, s);
-    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+    const primary = (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+    // within a state, pinned projects lead — the payload carried `pinned` all
+    // along and the first console never read it
+    return primary || (Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
   });
 }
 
@@ -135,23 +139,27 @@ function row(p, s, grouped) {
   const mine = pendingFor(s, p.id);
   const ctx = rowContext(p, s);
 
-  // one row, one destination — say which, rather than leaving it to be guessed
+  // Jump goes straight into the app; the row itself opens the drawer, where
+  // a question can be answered without leaving the console
   const target = mine[0]?.link ? { link: mine[0].link, what: 'the session that is waiting on you' }
     : p.sessions.find((x) => x.live) ? { link: p.sessions.find((x) => x.live).link, what: 'the live session' }
       : { link: p.links.open, what: 'a new session here' };
 
   const r = elx('div', 'tr', null, { role: 'row', tabindex: '0' });
   r.dataset.projectId = p.id;
-  r.title = `Open ${target.what}`;
-  r.setAttribute('aria-label', `${p.name}, ${p.stateLabel}. ${ctx.text}. Opens ${target.what}.`);
-  const go = () => openLink(target.link);
+  r.title = mine.length ? 'Open the project — the question is waiting there' : 'Open the project';
+  r.setAttribute('aria-label', `${p.name}, ${p.stateLabel}. ${ctx.text}. Opens project details.`);
+  const go = () => openDrawer(p.id, { focus: mine.length ? 'ask' : undefined });
   r.onclick = go;
   r.onkeydown = (e) => rowKeys(e, r, go);
 
   r.append(elx('i', `st ${p.tone} c-dot`, null, { role: 'cell', 'aria-hidden': 'true' }));
 
   const nm = elx('div', 'nm c-name', null, { role: 'cell' });
-  nm.append(el('b', null, p.name));
+  const b = el('b');
+  if (p.pinned) b.append(elx('span', 'pin', '◆', { title: 'Pinned', 'aria-label': 'pinned' }));
+  b.append(document.createTextNode(p.name));
+  nm.append(b);
   nm.append(el('span', null, short(p.path)));
   r.append(nm);
 
@@ -179,7 +187,7 @@ function row(p, s, grouped) {
 
   const acts = elx('div', 'acts c-acts', null, { role: 'cell' });
   acts.append(
-    action('New', `Start a new session in ${p.name}`, () => openLink(p.links.open)),
+    action('Jump', `Open ${target.what} in the app`, () => openLink(target.link)),
     action('Run', `Run something headless in ${p.name} now`, () => openRun(p)),
     action('Dir', `Reveal ${short(p.path)} in the Finder`, () => openLink(p.links.reveal))
   );

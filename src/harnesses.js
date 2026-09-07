@@ -23,9 +23,12 @@ export const HARNESSES = {
     transcripts: { dir: path.join(HOME, '.claude', 'projects'), format: 'claude-jsonl' },
     liveSessions: { dir: path.join(HOME, '.claude', 'sessions'), format: 'pid-json' },
     /** Headless invocation. `autonomy` is Sundust's per-project permission level. */
-    headlessArgs({ prompt, sessionId, autonomy, model, dirs = [] }) {
+    headlessArgs({ prompt, sessionId, resume, autonomy, model, dirs = [] }) {
       const args = ['-p', prompt, '--output-format', 'json'];
-      if (sessionId) args.push('--session-id', sessionId);
+      // --resume continues an existing transcript under the same id, so the
+      // scanner sees one session, not two. --session-id mints a fresh one.
+      if (resume) args.push('--resume', resume);
+      else if (sessionId) args.push('--session-id', sessionId);
       if (model) args.push('--model', model);
       // Read-only work often needs to look at data outside its own folder;
       // without this the run is denied and has to come back and ask.
@@ -80,7 +83,7 @@ export const HARNESSES = {
     support: 'launch-only',
     transcripts: { dir: path.join(HOME, '.codex', 'sessions'), format: 'unknown' },
     liveSessions: null,
-    headlessArgs({ prompt, autonomy, model }) {
+    headlessArgs({ prompt, autonomy, model }) {  // no resume: these harnesses have no session store yet
       const args = ['exec', prompt];
       if (model) args.push('--model', model);
       // Codex gates writes behind sandbox modes rather than tool permissions.

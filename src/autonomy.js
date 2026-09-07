@@ -147,6 +147,18 @@ EMIT: <event-name> <one line of context>
 --- TASK ---
 `;
 
+/* When a session is continued from the console the conversation is already in
+   context, so it gets the contract and not the full brief — and it comes AFTER
+   the human's words, because the scanner titles a session by the first line of
+   its last human message, and that line should be what the human said. */
+const RESUME_TAIL = `
+
+---
+(Sent from Sundust; you are continuing this session unattended. If a further
+decision genuinely needs the human, end with one line: NEEDS INPUT: <question>.
+Anything worth remembering: NOTE: <one line>. Work for another project:
+EMIT: <event> <context>. Finish with a short plain-text summary of what you did.)`;
+
 /** Full preamble for a run, including whatever this project already knows. */
 function preambleFor(project) {
   const notes = readNotes(project.id).trim();
@@ -223,11 +235,12 @@ export function appendNotes(projectId, lines) {
   fs.appendFileSync(notesFile(projectId), lines.map((l) => `- ${stamp} ${l}`).join('\n') + '\n');
 }
 
-export function runTask({ project, task, trigger = 'schedule' }) {
+export function runTask({ project, task, trigger = 'schedule', resume = null }) {
   const settings = getSettings();
   const harness = getHarness(project.harness || DEFAULT_HARNESS);
   const runId = crypto.randomUUID();
-  const sessionId = crypto.randomUUID();
+  // a resumed run keeps the session it continues, so the transcript stays one
+  const sessionId = resume || crypto.randomUUID();
   const startedAt = Date.now();
 
   // Anything that may write gets a checkpoint first, so the morning review has
@@ -240,7 +253,7 @@ export function runTask({ project, task, trigger = 'schedule' }) {
   const dirs = [...new Set([...(project.extraDirs || []), ...(task.dirs || [])])];
 
   const record = {
-    runId, sessionId, trigger,
+    runId, sessionId, trigger, resumed: Boolean(resume),
     projectId: project.id, projectPath: project.path,
     taskId: task.id || null, taskTitle: task.title || 'Ad-hoc run',
     prompt: task.prompt, autonomy: project.autonomy, harness: harness.id, dirs,
@@ -253,8 +266,9 @@ export function runTask({ project, task, trigger = 'schedule' }) {
   writeJSON(runFile(project.id, runId), record);
 
   const args = harness.headlessArgs({
-    prompt: preambleFor(project) + task.prompt,
+    prompt: resume ? task.prompt + RESUME_TAIL : preambleFor(project) + task.prompt,
     sessionId,
+    resume,
     autonomy: project.autonomy,
     model: project.model,
     dirs

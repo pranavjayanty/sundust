@@ -16,7 +16,7 @@
 import { $, el, elx, clear } from '../lib/dom.js';
 import { ago, money, plural, short, stamp } from '../lib/format.js';
 import { markSuperseded } from '../lib/derive.js';
-import { post } from '../lib/api.js';
+import { api, post } from '../lib/api.js';
 import { sectionHead } from './section.js';
 import { toast, fail } from '../ui/toast.js';
 
@@ -165,9 +165,22 @@ export function renderAdoptable(s, refresh) {
 }
 
 /* ------------------------------------------------------------------- foot */
-export function renderFoot(s) {
+export function renderFoot(s, refresh) {
   const foot = clear($('#foot'));
-  foot.append(el('span', null, s.settings.autonomyEnabled ? 'autonomy enabled' : 'autonomy paused'));
+  // the fleet-wide kill switch was a word in the footer; now it is the switch
+  const on = s.settings.autonomyEnabled;
+  const sw = elx('button', `switch${on ? '' : ' paused'}`, null, { type: 'button', role: 'switch',
+    'aria-checked': String(on),
+    title: on ? 'Every scheduled run in every project fires on its cron. Click to pause the fleet.'
+      : 'Nothing runs unattended anywhere until you resume. Click to resume.' });
+  sw.append(el('i'), document.createTextNode(on ? 'autonomy on · pause fleet' : 'autonomy paused · resume'));
+  sw.onclick = async () => {
+    sw.disabled = true;
+    try { await api('/api/settings', { method: 'PATCH', body: JSON.stringify({ autonomyEnabled: !on }) });
+      toast(on ? 'fleet paused — nothing will run unattended' : 'fleet resumed'); refresh(); }
+    catch (e) { fail(e); sw.disabled = false; }
+  };
+  foot.append(sw);
   foot.append(el('span', null, `${plural(s.activeRuns, 'run')} in flight`));
   foot.append(el('span', null, short(s.settings.workspaceRoot)));
   foot.append(el('span', null, `updated ${new Date().toLocaleTimeString()}`));

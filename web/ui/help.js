@@ -17,8 +17,10 @@ const KEYS = [
   ['t', 'Switch between light and dark'],
   ['?', 'Open this sheet'],
   ['↑ ↓', 'Move between roster rows'],
-  ['→ ←', 'Reach a row’s actions, and come back'],
-  ['↵', 'Open the focused row']
+  ['→ ←', 'Reach a row’s session list and actions, and come back'],
+  ['↵', 'Open the focused project'],
+  ['⌘↵', 'In a reply box: send it and continue the session headless'],
+  ['esc', 'Close whatever is open']
 ];
 
 const AUTONOMY = [
@@ -29,6 +31,13 @@ const AUTONOMY = [
 ];
 
 const CONCEPTS = [
+  ['The drawer', 'Click any project and it opens on the right: the question an agent is waiting '
+    + 'on with a box to answer it, every session with a way to continue it, the agenda with '
+    + 'switches, every run’s full result, the project’s notes, and its settings. Jump, in the '
+    + 'row, goes straight to the app instead.'],
+  ['Continue', 'Send a session a message from here and it carries on headless — same '
+    + 'transcript, same context, no app window. The result lands under Runs. This is how you '
+    + 'answer a NEEDS INPUT question without leaving the console.'],
   ['Activity', 'The widest roster column. It shows the most urgent true thing about a project: '
     + 'the question an agent is waiting on, the live session’s subject, the running or next '
     + 'scheduled task, or the last run’s summary.'],
@@ -65,7 +74,7 @@ function build() {
   const host = clear($('#help-body'));
   const s = store.data;
 
-  host.append(block('Display', [fieldToggle()]));
+  host.append(block('Display', [densityRow(), fieldToggle()]));
   host.append(block('Keyboard', KEYS.map(([k, v]) => defrow(k, v, true))));
 
   // straight from states.js, so the sheet cannot describe a state that moved
@@ -83,6 +92,30 @@ function build() {
         ? `${h.bin} — sessions indexed, one click to reopen, headless runs supported.`
         : `${h.bin} — headless runs and scheduling work. Session indexing and deep links are not wired up yet.`))));
   }
+}
+
+/** Type size. The root scales with the viewport already; this shifts the whole scale. */
+function densityRow() {
+  const r = el('div', 'help-row');
+  r.append(el('span', 'help-k', 'Type size'));
+  const v = el('div', 'help-v');
+  v.append(el('div', null, 'Everything on the page is set from one root size that already grows '
+    + 'with the window. Pick the step that reads best on your display.'));
+  const row = el('div', 'row');
+  const now = document.documentElement.dataset.density || 'comfortable';
+  for (const [k, label] of [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['spacious', 'Spacious']]) {
+    const b = elx('button', 'btn sm', label, { type: 'button', 'aria-pressed': String(now === k) });
+    b.onclick = () => {
+      if (k === 'comfortable') delete document.documentElement.dataset.density;
+      else document.documentElement.dataset.density = k;
+      try { localStorage.setItem('sundust-density', k); } catch {}
+      build();
+    };
+    row.append(b);
+  }
+  v.append(row);
+  r.append(v);
+  return r;
 }
 
 /** The background field is texture. If it fights the text for you, turn it off. */

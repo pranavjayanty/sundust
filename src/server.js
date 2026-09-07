@@ -247,6 +247,13 @@ export function createServer() {
 
       if (url.pathname === '/api/state') return send(200, buildState());
 
+      // a project's durable notes — the NOTE: lines its runs have accumulated
+      if (url.pathname === '/api/notes') {
+        const id = url.searchParams.get('project');
+        if (!id) return send(400, { error: 'project required' });
+        return send(200, { text: readNotes(id) });
+      }
+
       if (url.pathname === '/api/open' && req.method === 'POST') {
         const b = await body(req);
         if (!b.url || !/^(claude|file|https?|vscode|cursor|x-github-client):/.test(b.url)) {
@@ -300,11 +307,20 @@ export function createServer() {
           ? (project.agenda || []).find((t) => t.id === b.taskId)
           : { id: null, title: b.title || 'Ad-hoc run', prompt: b.prompt };
         if (!task?.prompt) return send(400, { error: 'no prompt' });
-        if (project.autonomy === 'off') return send(400, { error: 'autonomy is off for this project' });
-        const { runId, sessionId, done } = runTask({ project, task, trigger: 'manual' });
+        if (project.autonomy === 'off') {
+          return send(400, { error: 'autonomy is off for this project — turn it on in the project drawer, or open the session in the app' });
+        }
+        // Continue an existing session with this prompt, headless. When the
+        // prompt answers an open question, that question is settled here.
+        const resume = b.resumeSessionId || null;
+        if (resume && !linksFor(project.harness).canDeepLink) {
+          return send(400, { error: `${project.harness} cannot resume a session headlessly yet` });
+        }
+        const { runId, sessionId, done } = runTask({ project, task, trigger: 'manual', resume });
+        if (b.askId) resolveAsk(b.askId);
         done.then(broadcast);
         broadcast();
-        return send(200, { runId, sessionId });
+        return send(200, { runId, sessionId, resumed: Boolean(resume) });
       }
 
       if (url.pathname === '/api/review' && req.method === 'POST') {

@@ -16,6 +16,7 @@ import { fail } from './ui/toast.js';
 import { initDialogs, openNew } from './ui/dialogs.js';
 import { initPalette, openPalette } from './ui/palette.js';
 import { initHelp, openHelp } from './ui/help.js';
+import { initDrawer } from './ui/drawer.js';
 
 import { renderWarn } from './views/warn.js';
 import { renderLede } from './views/lede.js';
@@ -55,7 +56,7 @@ subscribe((s, reason) => {
   renderSchedule(s);
   renderPanels(s);
   renderAdoptable(s, refresh);
-  renderFoot(s);
+  renderFoot(s, refresh);
   bindMarks();
 });
 
@@ -119,6 +120,7 @@ initTheme();
 initDialogs(refresh);
 initPalette(refresh);
 initHelp();
+initDrawer(refresh);
 startField($('#field'));
 bindMarks();
 schedule();

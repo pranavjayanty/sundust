@@ -1,12 +1,18 @@
 /* Sundust — design tokens.
 
-   One ramp, two themes, and a hard rule: every step used for TEXT clears
-   4.5:1 against its background in both light and dark. The old ramp bottomed
-   out at 3.0:1 and spent it on the things you actually read — paths,
-   timestamps, column headers — so the console looked calm and read badly.
+   Type is fluid. The root size grows with the viewport between 15px and 20px,
+   and every size on the page is a multiple of it, so a console that reads
+   well on a laptop is not a miniature on a 32" display. Density scales the
+   root again — compact, comfortable, spacious — and is applied before first
+   paint from localStorage.
 
-   --ink-mute is the escape hatch for marks that are not text: rules, tracks,
-   the resting state of a bar. Never set type in it. */
+   One ramp, two themes, and a hard rule: every step used for TEXT clears
+   4.5:1 against its background in both light and dark. --ink-mute is for
+   rules and tracks and is never used to set type. */
+
+html{font-size:clamp(15px, 0.5vw + 8px, 20px)}
+html[data-density="compact"]{font-size:clamp(13.5px, 0.42vw + 7.5px, 17px)}
+html[data-density="spacious"]{font-size:clamp(16.5px, 0.6vw + 8.5px, 22px)}
 
 :root{
   --amber:#ffb020;          /* 10.8:1 — wordmark only */
@@ -28,28 +34,28 @@
   --shadow:0 30px 80px rgba(0,0,0,.5);
   --focus:var(--ink-2);
 
-  --s1:4px; --s2:8px; --s3:12px; --s4:18px; --s5:26px; --s6:40px; --s7:64px;
+  /* spacing scale, in rem so it breathes with the type */
+  --s1:.27rem; --s2:.53rem; --s3:.8rem; --s4:1.2rem; --s5:1.73rem; --s6:2.67rem; --s7:4.27rem;
   --r:8px;
-  --gutter:clamp(18px,4vw,44px);
+  --gutter:clamp(18px,4vw,60px);
   --display:"Helvetica Neue",Helvetica,Arial,sans-serif;
   --body:-apple-system,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
   --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,monospace;
 
-  /* Type scale. The first pass raised contrast but left the sizes alone, and on
-     a large display the result still read small: 13.5px prose, 12.5px data,
-     11px labels. Everything moves up a step, and the floor is 12px. */
-  --t-micro:12px;
-  --t-label:12px;
-  --t-body:15px;
-  --t-num:13.5px;
-  --t-name:15.5px;
+  /* type scale: .8rem is the floor for anything read as a word */
+  --t-micro:.8rem;
+  --t-label:.8rem;
+  --t-num:.9rem;
+  --t-body:1rem;
+  --t-read:.95rem;          /* the Activity column and other one-line prose */
+  --t-name:1.04rem;
   --track:.11em;
 
   color-scheme:dark;
 }
 
 :root[data-theme="light"]{
-  --amber:#8a5606;          /* 5.9:1 — the old #b5710a was 3.8:1 and failed */
+  --amber:#8a5606;          /* 5.9:1 */
   --bad:#b23325;            /* 5.9:1 */
 
   --bg:#fbfaf9;

@@ -15,6 +15,7 @@ import { currentTheme, toggleTheme } from './theme.js';
 import { toast, fail } from './toast.js';
 import { openLink } from './links.js';
 import { openNew, closeDialogs } from './dialogs.js';
+import { openDrawer } from './drawer.js';
 
 const GROUPS = ['Needs you', 'Projects', 'Sessions', 'Run a task', 'New project', 'View'];
 const CAP = { 'Needs you': 20, Projects: 6, Sessions: 8, 'Run a task': 6, 'New project': 5, View: 2 };
@@ -64,8 +65,8 @@ function items() {
   }
 
   for (const p of s.projects) {
-    out.push({ group: 'Projects', icon: '›', kind: 'new session',
-      label: `${p.name} — new session`, run: () => openLink(p.links.open) });
+    out.push({ group: 'Projects', icon: '›', kind: p.stateLabel.toLowerCase(),
+      label: p.name, run: () => openDrawer(p.id) });
   }
 
   for (const p of s.projects) {

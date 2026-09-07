@@ -39,6 +39,30 @@ Every project's session count is a disclosure. Open it and the roster lists
 every transcript in that project — live first, then whatever is waiting on you,
 then by recency — each with one click back into where it left off.
 
+Click a project and the **drawer** opens: everything you can read about it and
+everything you can do to it, without leaving the console.
+
+- **Needs you** — the question an agent stopped on, with the context it had,
+  and a box to answer it. Send, and the run continues headless in the same
+  session; the result lands under Runs.
+- **Sessions** — every transcript, each with *Open* (in the app) and
+  *Continue…* (send it a message; it carries on headless).
+- **Agenda** — each task with a switch, its schedule in words, its priority
+  and its next fire; *Run* it now, remove it, or add one with a cron and a
+  prompt.
+- **Runs** — every recent run with its full result or error, cost, turns, and
+  whether its edits are waiting in Review.
+- **Notes** — the `NOTE:` lines the project has accumulated, which every later
+  run reads first.
+- **Settings** — autonomy, pin, archive, and stop tracking.
+
+*Jump*, in the row, skips the drawer and opens the session in the app.
+
+Type is fluid: one root size that grows with the window from 15px to 20px,
+and every size on the page is a multiple of it. The cheat sheet has a
+compact / comfortable / spacious switch on top of that. The footer's autonomy
+switch pauses every scheduled run in every project, and resumes them.
+
 Nothing is left to be guessed at: column headers, section labels and controls
 carry hover text, and `?` opens a sheet that says what every word on the page
 means, built from the same state and harness definitions the app runs on.
@@ -104,7 +128,10 @@ is truncated at 14336 characters.
 **3. Keeps projects moving without you.** Each project carries an *agenda* — cron
 tasks that run headless in that folder. Because a headless run writes a normal
 transcript, an autonomous run **is** a resumable session: when one gets stuck you
-click through and keep talking to it with full context.
+click through and keep talking to it with full context — or answer it from the
+console and let it carry on headless. `POST /api/run` with `resumeSessionId`
+continues any session with a prompt (`claude -p … --resume <id>`), and an
+`askId` alongside it settles the open question.
 
 ## The autonomy loop
 
@@ -258,8 +285,9 @@ sundust run <match> [task] run an agenda task now, headless
 - `/` — focus the roster filter
 - `t` — toggle the theme
 
-In the roster: Tab between rows, `↑↓` to move, `→` to reach a row's actions,
-`←` to come back, `↵` to open.
+In the roster: Tab between rows, `↑↓` to move, `→` to reach a row's session
+list and actions, `←` to come back, `↵` to open the drawer. In a reply box,
+`⌘↵` sends.
 
 ## Layout
 
@@ -281,7 +309,7 @@ web/marks.js       small reactive marks (dots, rings, hatch)
 web/app.js         wiring: boot, update loop, global keys
 web/css/           tokens → base → components → views
 web/lib/           dom, format, api, store, derive
-web/ui/            theme, toast, links, dialogs, palette, help
+web/ui/            theme, toast, links, dialogs, palette, help, drawer
 web/views/         warn, lede, roster, schedule, review, panels
 ```
 
