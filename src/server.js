@@ -18,6 +18,7 @@ import { stateOf, stateList } from './states.js';
 import { harnessList, DEFAULT_HARNESS } from './harnesses.js';
 import { readUsage } from './usage.js';
 import { isRepo } from './checkpoint.js';
+import { preflight, authBlocker } from './preflight.js';
 import { linksFor } from './deeplink.js';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
@@ -136,12 +137,12 @@ export function buildState() {
   }
   upcoming.sort((a, b) => a.at - b.at);
 
-  // The standalone `claude` binary authenticates separately from the desktop app.
-  // If it cannot, every scheduled run fails the same way — say so once, loudly.
+  // Ask the harnesses directly rather than waiting for a run to fail: a harness
+  // authenticates separately from the desktop app, so the app working here says
+  // nothing about whether unattended runs will.
   const allRuns = recentRuns(30);
-  const authFail = allRuns.find(
-    (r) => r.ok === false && /authenticat|oauth|logged? ?in|credential/i.test(r.error || '')
-  );
+  const auth = preflight(projects);
+  const authWarn = authBlocker(auth);
 
   // Edits made while you were away, waiting on a yes or a no.
   const review = [];
@@ -164,9 +165,8 @@ export function buildState() {
     review,
     deferrals: recentDeferrals(),
     events: readEvents().slice(-20).reverse(),
-    authWarning: authFail
-      ? 'The `claude` CLI could not authenticate, so scheduled runs are failing. Run `claude` once in a terminal to sign in.'
-      : null,
+    authWarning: authWarn,
+    auth,
     projects: enriched,
     candidates: discoverCandidates(sessions),
     templates: templateList(),

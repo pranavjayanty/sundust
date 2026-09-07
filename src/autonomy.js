@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { RUNS_DIR, ASKS, EVENTS, NOTES_DIR, getSettings, readJSON, writeJSON } from './config.js';
 import { readUsage } from './usage.js';
+import { harnessAuth } from './preflight.js';
 import { loadProjects, upsertProject } from './projects.js';
 import { scanSessions } from './scan.js';
 import { getHarness, DEFAULT_HARNESS } from './harnesses.js';
@@ -395,6 +396,17 @@ export function tick(now = new Date()) {
       if (task.lastFiredKey === minuteKey) continue;
       if (!cronMatches(task.schedule, now)) continue;
       if (active.size >= settings.maxConcurrentRuns) return started;
+
+      // a signed-out harness cannot run; skip rather than burn the slot and
+      // leave a failure in the log for something that never could have worked
+      const auth = harnessAuth(project.harness || 'claude-code');
+      if (auth.known && !auth.ok) {
+        deferrals.push({ project: project.name, task: task.title, at: Date.now(),
+          why: auth.method === 'not-installed'
+            ? `${auth.label} is not installed`
+            : `${auth.label} is signed out` });
+        continue;
+      }
 
       // spend the plan deliberately rather than firing blind
       const gate = budgetGate(task.priority, usage, settings);

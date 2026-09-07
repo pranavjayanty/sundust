@@ -49,6 +49,17 @@ export const HARNESSES = {
         };
       } catch { return null; }
     },
+    /**
+     * Is the CLI signed in? The desktop app and the CLI authenticate separately,
+     * so the app working tells you nothing about whether headless runs will.
+     * Returns null when the answer cannot be determined.
+     */
+    authProbe: { args: ['auth', 'status'], parse(stdout) {
+      try {
+        const j = JSON.parse(stdout);
+        return { ok: j.loggedIn === true, method: j.authMethod || 'none' };
+      } catch { return null; }
+    } },
     // The desktop app registers claude:// — this is what makes a session one click away.
     deeplink: {
       open: (folder, prompt) =>
