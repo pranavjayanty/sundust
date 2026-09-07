@@ -3,7 +3,7 @@ import { exec } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import { createServer, buildState } from '../src/server.js';
-import { ensureDirs, getSettings } from '../src/config.js';
+import { ensureDirs, getSettings, saveSettings } from '../src/config.js';
 import { loadProjects, scaffold, adopt, relocate } from '../src/projects.js';
 import { tick, runTask, describeCron } from '../src/autonomy.js';
 import { TEMPLATES } from '../src/templates.js';
@@ -252,6 +252,21 @@ switch (cmd) {
     break;
   }
 
+  case 'remote': {
+    const sub = args[1]; const host = (args[2] || '').replace(/^https?:\/\//, '').replace(/[/:].*$/, '').toLowerCase();
+    const cur = getSettings().remoteHosts || [];
+    if (sub === 'add' && host) {
+      saveSettings({ remoteHosts: [...new Set([...cur, host])] });
+      console.log(`  ${C.g('✓')} ${host} may reach the console\n  ${C.dim('serve it over your tailnet with: tailscale serve --bg ' + getSettings().port)}`);
+    } else if (sub === 'remove' && host) {
+      saveSettings({ remoteHosts: cur.filter((h) => h !== host) });
+      console.log(`  ${C.g('✓')} ${host} removed`);
+    } else {
+      console.log(cur.length ? cur.map((h) => `  ${h}`).join('\n') : C.dim('  no remote hosts — sundust remote add <host>'));
+    }
+    break;
+  }
+
   case 'install': {
     try {
       const { plist, log } = service.install({ port: flag('port', null) });
@@ -294,6 +309,7 @@ switch (cmd) {
     ${C.b('install')}            run at login and restart if it dies (launchd)
                        ${C.dim('--port N · then `sundust service` and `sundust logs`')}
     ${C.b('uninstall')}          remove the login service
+    ${C.b('remote')} add <host>  let a tailnet or tunnel hostname reach the console
 
     ${C.b('new')} <name>         scaffold a project and open Claude in it
                        ${C.dim('--template blank|finance|recipes|fitness|journal')}

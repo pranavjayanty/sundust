@@ -2,7 +2,7 @@
    modal, panel, palette, toasts. */
 
 /* ----------------------------------------------------------- buttons */
-.btn{appearance:none;font:inherit;font-size:var(--t-md);font-weight:500;line-height:1.2;cursor:pointer;
+.btn{appearance:none;-webkit-appearance:none;font:inherit;font-size:var(--t-md);font-weight:500;line-height:1.2;cursor:pointer;
   display:inline-flex;align-items:center;gap:.45em;padding:.5em .85em;border-radius:var(--r-sm);
   border:1px solid transparent;background:transparent;color:var(--text-2);white-space:nowrap;
   transition:background .12s,color .12s,border-color .12s,box-shadow .12s}
@@ -28,7 +28,7 @@ kbd{font-family:var(--mono);font-size:var(--t-xs);color:var(--text-3);background
   padding:.18em .6em .18em .5em;border-radius:999px;line-height:1.4;white-space:nowrap;
   background:var(--gray-wash);color:var(--gray)}
 .badge i{width:.5em;height:.5em;border-radius:50%;background:currentColor;flex:none}
-.badge.blocked{background:var(--amber-wash);color:var(--amber)}
+.badge.blocked{background:var(--attn-wash);color:var(--attn)}
 .badge.blocked i{animation:blip 1.8s infinite}
 .badge.failed,.badge.red{background:var(--red-wash);color:var(--red)}
 .badge.running{background:var(--green-wash);color:var(--green)}
@@ -40,7 +40,7 @@ kbd{font-family:var(--mono);font-size:var(--t-xs);color:var(--text-3);background
 
 /* status dot on its own */
 .dot{width:.55rem;height:.55rem;border-radius:50%;background:var(--gray);flex:none}
-.dot.blocked{background:var(--amber)} .dot.running{background:var(--green)} .dot.scheduled{background:var(--blue)}
+.dot.blocked{background:var(--attn)} .dot.running{background:var(--green)} .dot.scheduled{background:var(--blue)}
 .dot.failed{background:var(--red)} .dot.idle{background:var(--text-4)} .dot.archived{background:var(--border-2)}
 
 /* project tile: initial or emoji on a wash of the project's own accent.
@@ -84,7 +84,7 @@ kbd{font-family:var(--mono);font-size:var(--t-xs);color:var(--text-3);background
 .table tr.row:focus-visible td{background:var(--surface-2);box-shadow:inset 3px 0 0 var(--accent)}
 .table tr.group td{padding:.9rem var(--pad) .45rem;font-size:var(--t-sm);font-weight:600;color:var(--text-3);
   border-bottom:none;background:var(--surface)}
-.table tr.group.hot td{color:var(--amber)}
+.table tr.group.hot td{color:var(--attn)}
 .table tr.group td .n{font-family:var(--mono);font-weight:400;margin-left:.5em;color:var(--text-3)}
 .table td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .table td.dim{color:var(--text-3)}
@@ -128,7 +128,7 @@ kbd{font-family:var(--mono);font-size:var(--t-xs);color:var(--text-3);background
 .chip[aria-pressed=true]{background:var(--surface-3);border-color:var(--text-4);color:var(--text)}
 .chip .v{font-family:var(--mono);color:var(--text-3)}
 .chip.zero{color:var(--text-3)}
-.chip.hot .v{color:var(--amber)}
+.chip.hot .v{color:var(--attn)}
 .chip .x{color:var(--text-4)}
 
 /* ---------------------------------------------------------------- tabs */
@@ -138,7 +138,7 @@ kbd{font-family:var(--mono);font-size:var(--t-xs);color:var(--text-3);background
 .tab:hover{color:var(--text)}
 .tab[aria-selected=true]{color:var(--text);border-bottom-color:var(--accent)}
 .tab .count{font-family:var(--mono);font-size:var(--t-xs);color:var(--text-3);background:var(--surface-2);border-radius:999px;padding:.05em .5em}
-.tab.hot .count{background:var(--amber-wash);color:var(--amber)}
+.tab.hot .count{background:var(--attn-wash);color:var(--attn)}
 
 /* ---------------------------------------------------------------- warn */
 .warn{display:flex;gap:.8rem;align-items:flex-start;background:var(--red-wash);border:1px solid color-mix(in srgb,var(--red) 40%,transparent);
@@ -197,7 +197,7 @@ dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
   transform:rotate(-45deg);transition:transform .12s;margin-right:.2em}
 .item details[open] summary::before{transform:rotate(45deg)}
 
-.ask{background:var(--amber-wash);border:1px solid color-mix(in srgb,var(--amber) 35%,transparent);border-radius:var(--r);
+.ask{background:var(--attn-wash);border:1px solid color-mix(in srgb,var(--attn) 35%,transparent);border-radius:var(--r);
   padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.6rem}
 .ask .q{font-size:var(--t-base);color:var(--text);line-height:1.5;font-weight:500}
 .ask .from{font-size:var(--t-sm);color:var(--text-3)}
@@ -236,7 +236,7 @@ dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
 .pal-item:hover{background:var(--surface-2)}
 .pal-item[aria-selected=true]{background:var(--surface-3);color:var(--text)}
 .pal-item .ic{color:var(--text-3)}
-.pal-item.hot .ic{color:var(--amber)}
+.pal-item.hot .ic{color:var(--attn)}
 .pal-item .ptxt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--t-md)}
 .pal-item .kind{font-size:var(--t-xs);color:var(--text-3);font-family:var(--mono)}
 .pal-foot{border-top:1px solid var(--border);padding:.55rem 1rem;display:flex;gap:1.2rem;font-size:var(--t-xs);color:var(--text-3);align-items:center}

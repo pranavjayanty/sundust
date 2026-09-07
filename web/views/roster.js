@@ -143,8 +143,11 @@ function row(p, s) {
   tr.append(el('td', `c-next num${p.nextAt ? ' strong' : ' dim'}`, p.nextAt ? `in ${until(p.nextAt)}` : (p.autonomy === 'off' ? 'off' : '—')));
 
   const acts = el('td', 'c-acts');
+  const remote = Boolean(s.remote);
   acts.append(
-    action('Jump', 'external', `Open ${target.what} in the app`, () => openLink(target.link)),
+    action(remote ? 'On Mac' : 'Jump', 'external',
+      remote ? `Open ${target.what} in the app on the Mac that runs Sundust — not on this device`
+        : `Open ${target.what} in the app`, () => openLink(target.link)),
     action('Run', 'play', `Run something headless in ${p.name} now`, () => openRun(p)),
     action(null, 'more', 'Open project details', () => openDrawer(p.id))
   );

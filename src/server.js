@@ -23,7 +23,8 @@ import { linksFor } from './deeplink.js';
 import { cachedStatus as serviceStatus } from './service.js';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.png': 'image/png' };
 
 const norm = (p) => path.resolve(p || '');
 
@@ -221,7 +222,12 @@ export function buildState() {
    - OPTIONS is answered with nothing, so no page ever gets permission. */
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
 const MUTATING = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
-const hostOk = (req) => LOCAL_HOSTS.has(String(req.headers.host || '').replace(/:\d+$/, ''));
+/* A tailnet or tunnel hostname (`sundust remote add <host>`) is also accepted.
+   The server still binds to loopback: the tunnel terminates on this machine
+   and forwards here, so exposure is exactly what the tunnel grants. */
+const hostOf = (req) => String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+const hostOk = (req) => LOCAL_HOSTS.has(hostOf(req)) || (getSettings().remoteHosts || []).map((h) => h.toLowerCase()).includes(hostOf(req));
+const isRemote = (req) => !LOCAL_HOSTS.has(hostOf(req));
 const clientOk = (req) => req.headers['x-sundust-client'] === '1'
   && /^application\/json\b/i.test(String(req.headers['content-type'] || ''));
 
@@ -279,7 +285,7 @@ export function createServer() {
         return;
       }
 
-      if (url.pathname === '/api/state') return send(200, buildState());
+      if (url.pathname === '/api/state') return send(200, { ...buildState(), remote: isRemote(req) });
 
       // a project's durable notes — the NOTE: lines its runs have accumulated
       if (url.pathname === '/api/notes') {
@@ -401,7 +407,9 @@ export function createServer() {
       if (!file.startsWith(WEB) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
         res.writeHead(404); return res.end('not found');
       }
-      res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
+      const ext = path.extname(file);
+      res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream',
+        'cache-control': ext === '.woff2' ? 'public, max-age=31536000, immutable' : 'no-store' });
       return fs.createReadStream(file).pipe(res);
     } catch (e) {
       return send(500, { error: String(e?.message || e) });

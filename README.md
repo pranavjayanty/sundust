@@ -57,7 +57,7 @@ Click a project and the **panel** opens on the right, in tabs:
 
 *Jump*, in the row, skips the panel and opens the session in the app.
 
-Inter on a fluid root that grows with the window from 15px to 19px; every size
+Inter — vendored, no network needed — on a fluid root that grows with the window from 16px to 20px; every size
 on the page is a multiple of it, and the cheat sheet (`?`) has a compact /
 comfortable / spacious switch on top. Bright text on layered dark surfaces —
 body 18:1, secondary 13:1, the softest label 8:1 — and a light theme that is
@@ -362,6 +362,45 @@ rather than its timestamp — a hollow entry (`accessToken: ""`) reads as
 "present" while being useless. Deleting the Keychain item
 (`security delete-generic-password -s "Claude Code-credentials"`) and signing in
 again clears that state.
+
+## Managing it from your phone
+
+Sundust is local-first on purpose: the transcripts, the harness and the
+`claude://` links all live on one Mac. Nothing about that has to change to
+run it from a phone or an iPad — the Mac stays the runner, and the other
+device is a remote control. Everything that matters remotely already works
+headless: answering a question, continuing a session, running or editing the
+agenda, reviewing edits, pausing the fleet. Only *Jump* and *Open* (which
+launch the app on the Mac) are Mac-only, and the console says so when you
+are remote.
+
+The recommended path is [Tailscale](https://tailscale.com): a private network
+between your own devices, with identity and TLS handled for you, and nothing
+exposed to the internet.
+
+```bash
+# on the Mac, once
+node bin/sundust.js install                       # runs at login
+tailscale serve --bg 4173                         # https://<mac>.<tailnet>.ts.net → localhost:4173
+node bin/sundust.js remote add <mac>.<tailnet>.ts.net
+```
+
+Then open that URL on the phone (on the same tailnet) and *Add to Home
+Screen* — the console ships a manifest, so it installs as an app. Requests
+still arrive on loopback: Tailscale terminates the connection on the Mac and
+forwards it, so the server never binds to anything but `127.0.0.1`, and the
+`Host` allowlist is the only thing that changes.
+
+If you must reach it from outside your tailnet, put it behind a tunnel with a
+login in front (Cloudflare Tunnel + Access, ngrok with OAuth) and add that
+hostname the same way. Do not port-forward it.
+
+**Do you need remote agents?** Only if you want runs to happen while the Mac
+is off. Moving the runner to the cloud (Claude Code on a server, or a managed
+agent platform) means the repos, the transcripts and the credentials move
+too, and the app-side links stop meaning anything — a different product. For
+"the Mac is on, I am not at it", Tailscale plus the login service is the whole
+answer. Set the Mac not to sleep, or leave a `caffeinate -s` running.
 
 ## The local API is not open to the web
 

@@ -3,9 +3,9 @@
    Layered dark surfaces, bright text, one accent, and semantic colour for
    status. Type is Inter on a fluid root; every size is a multiple of it. */
 
-html{font-size:clamp(15px, 0.4vw + 9.5px, 19px)}
-html[data-density="compact"]{font-size:clamp(13.5px, 0.35vw + 8.5px, 17px)}
-html[data-density="spacious"]{font-size:clamp(16.5px, 0.48vw + 10.5px, 21px)}
+html{font-size:clamp(16px, 0.42vw + 10px, 20px)}
+html[data-density="compact"]{font-size:clamp(14px, 0.36vw + 9px, 17.5px)}
+html[data-density="spacious"]{font-size:clamp(17.5px, 0.5vw + 11px, 22px)}
 
 :root{
   /* surfaces */
@@ -22,18 +22,20 @@ html[data-density="spacious"]{font-size:clamp(16.5px, 0.48vw + 10.5px, 21px)}
   --text-3:#acacb6;        /*  8:1 — the softest colour any label is set in */
   --text-4:#8b8b95;        /*  5.6:1 — placeholders, disabled, decorative glyphs */
 
-  /* accent + semantic */
-  --accent:#818cf8; --accent-strong:#6366f1; --accent-text:#ffffff;
-  --accent-wash:rgba(99,102,241,.14);
+  /* accent: amber, for the name. Filled controls use the deeper step with dark
+     ink on it (9:1); links, icons and highlights use the bright step. */
+  --accent:#fbbf24; --accent-strong:#f59e0b; --accent-text:#1a1305;
+  --accent-wash:rgba(245,158,11,.14);
+  /* semantic. Attention is rose so it never reads as the brand colour. */
+  --attn:#fb7185;  --attn-wash:rgba(251,113,133,.14);
   --green:#4ade80; --green-wash:rgba(74,222,128,.13);
-  --amber:#fbbf24; --amber-wash:rgba(251,191,36,.14);
   --red:#f87171;   --red-wash:rgba(248,113,113,.14);
   --blue:#60a5fa;  --blue-wash:rgba(96,165,250,.14);
   --gray:#a1a1aa;  --gray-wash:rgba(161,161,170,.13);
 
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 40px rgba(0,0,0,.45);
   --shadow-sm:0 1px 2px rgba(0,0,0,.35);
-  --ring:0 0 0 3px rgba(129,140,248,.35);
+  --ring:0 0 0 3px rgba(245,158,11,.35);
 
   --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;
@@ -48,7 +50,7 @@ html[data-density="spacious"]{font-size:clamp(16.5px, 0.48vw + 10.5px, 21px)}
   --t-2xl:1.75rem;/* 26 — page heading */
 
   --r-sm:6px; --r:10px; --r-lg:14px;
-  --sidebar:15.5rem;
+  --sidebar:16.5rem;
   --pad:1.4rem;
   color-scheme:dark;
 }
@@ -57,15 +59,15 @@ html[data-density="spacious"]{font-size:clamp(16.5px, 0.48vw + 10.5px, 21px)}
   --bg:#f4f4f5; --surface:#ffffff; --surface-2:#f4f4f5; --surface-3:#e9e9ec;
   --border:#e4e4e7; --border-2:#d4d4d8;
   --text:#09090b; --text-2:#3f3f46; --text-3:#52525b; --text-4:#a1a1aa;
-  --accent:#4f46e5; --accent-strong:#4f46e5; --accent-wash:rgba(79,70,229,.10);
+  --accent:#b45309; --accent-strong:#b45309; --accent-text:#ffffff; --accent-wash:rgba(217,119,6,.12);
+  --attn:#be123c;  --attn-wash:rgba(225,29,72,.10);
   --green:#15803d; --green-wash:rgba(22,163,74,.12);
-  --amber:#b45309; --amber-wash:rgba(217,119,6,.14);
   --red:#b91c1c;   --red-wash:rgba(220,38,38,.10);
   --blue:#1d4ed8;  --blue-wash:rgba(37,99,235,.10);
   --gray:#52525b;  --gray-wash:rgba(82,82,91,.10);
   --shadow:0 1px 2px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.10);
   --shadow-sm:0 1px 2px rgba(0,0,0,.06);
-  --ring:0 0 0 3px rgba(79,70,229,.25);
+  --ring:0 0 0 3px rgba(180,83,9,.25);
   color-scheme:light;
 }
 @media (prefers-color-scheme:light){
@@ -73,15 +75,15 @@ html[data-density="spacious"]{font-size:clamp(16.5px, 0.48vw + 10.5px, 21px)}
     --bg:#f4f4f5; --surface:#ffffff; --surface-2:#f4f4f5; --surface-3:#e9e9ec;
     --border:#e4e4e7; --border-2:#d4d4d8;
     --text:#09090b; --text-2:#3f3f46; --text-3:#52525b; --text-4:#a1a1aa;
-    --accent:#4f46e5; --accent-strong:#4f46e5; --accent-wash:rgba(79,70,229,.10);
+    --accent:#b45309; --accent-strong:#b45309; --accent-text:#ffffff; --accent-wash:rgba(217,119,6,.12);
+    --attn:#be123c;  --attn-wash:rgba(225,29,72,.10);
     --green:#15803d; --green-wash:rgba(22,163,74,.12);
-    --amber:#b45309; --amber-wash:rgba(217,119,6,.14);
     --red:#b91c1c;   --red-wash:rgba(220,38,38,.10);
     --blue:#1d4ed8;  --blue-wash:rgba(37,99,235,.10);
     --gray:#52525b;  --gray-wash:rgba(82,82,91,.10);
     --shadow:0 1px 2px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.10);
     --shadow-sm:0 1px 2px rgba(0,0,0,.06);
-    --ring:0 0 0 3px rgba(79,70,229,.25);
+    --ring:0 0 0 3px rgba(180,83,9,.25);
     color-scheme:light;
   }
 }

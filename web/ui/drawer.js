@@ -135,8 +135,10 @@ function header(p, s) {
   const jump = mine[0]?.link ? ['Open what needs you', mine[0].link, 'Open the session that is waiting on you']
     : live ? ['Open live session', live.link, 'Open the session that is running right now']
       : ['New session', p.links.open, 'Start a new session in this folder'];
+  const remote = Boolean(s.remote);
   tools.append(
-    action(jump[0], 'primary', jump[2], () => openLink(jump[1]), 'external'),
+    action(remote ? `${jump[0]} on Mac` : jump[0], remote ? 'secondary' : 'primary',
+      remote ? `${jump[2]} — in the app on the Mac that runs Sundust, not here` : jump[2], () => openLink(jump[1]), 'external'),
     action('New session', 'secondary', 'Start a fresh session in this folder', () => openLink(p.links.open), 'plus'),
     action('Run now', 'secondary', 'Run something headless here', () => openRun(p), 'play'),
     action('Reveal', 'ghost', `Show ${short(p.path)} in the Finder`, () => openLink(p.links.reveal), 'folder'),

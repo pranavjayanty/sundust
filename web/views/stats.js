@@ -10,6 +10,8 @@ import { store, setView } from '../lib/store.js';
 import { countFor } from './sidebar.js';
 
 export function renderStats(s) {
+  const t = document.querySelector('#topbar-title');
+  if (t) t.textContent = s.remote ? 'Overview · remote' : 'Overview';
   renderHeadline(s);
   renderCards(s);
   renderChips(s);

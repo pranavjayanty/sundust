@@ -71,3 +71,18 @@ test('a run needs a prompt and an existing project', async () => {
   assert.equal((await json('POST', `${srv.url}/api/run`, { projectId: 'nope', prompt: 'x' })).status, 404);
   assert.equal((await json('POST', `${srv.url}/api/run`, { projectId: 'p1' })).status, 400);
 });
+
+test('a hostname added with `sundust remote add` is accepted, and marks the client remote', async () => {
+  const { saveSettings } = await import('../src/config.js');
+  saveSettings({ remoteHosts: ['mac.tail1234.ts.net'] });
+  assert.equal(await rawGet(srv.port, '/api/notes?project=x', { host: 'mac.tail1234.ts.net' }), 200);
+  assert.equal(await rawGet(srv.port, '/api/notes?project=x', { host: 'MAC.tail1234.ts.net:443' }), 200, 'case and port do not matter');
+  assert.equal(await rawGet(srv.port, '/api/notes?project=x', { host: 'other.tail1234.ts.net' }), 403);
+  saveSettings({ remoteHosts: [] });
+});
+
+test('remoteHosts cannot be set over HTTP', async () => {
+  const r = await json('PATCH', `${srv.url}/api/settings`, { remoteHosts: ['evil.example'] });
+  assert.equal(r.status, 200);
+  assert.deepEqual((await r.json()).remoteHosts || [], []);
+});
