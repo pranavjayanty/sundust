@@ -137,6 +137,20 @@ export function tailscaleServe(port) {
   if (!st.installed) throw new Error('Tailscale is not installed — brew install --cask tailscale, then open it and log in');
   if (!st.loggedIn) throw new Error(`Tailscale is installed but not connected (${st.backend || st.error || 'not running'}) — open Tailscale and log in`);
   if (!st.dnsName) throw new Error('Tailscale has no MagicDNS name for this machine — enable MagicDNS in the admin console');
-  const out = execFileSync(st.bin, ['serve', '--bg', String(port)], { encoding: 'utf8', timeout: 20000, stdio: ['ignore', 'pipe', 'pipe'] });
-  return { dnsName: st.dnsName, url: `https://${st.dnsName}/`, output: out.trim() };
+  try {
+    const out = execFileSync(st.bin, ['serve', '--bg', String(port)], { encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] });
+    return { dnsName: st.dnsName, url: `https://${st.dnsName}/`, output: out.trim() };
+  } catch (e) {
+    // The first time, `serve` prints an enable link for the tailnet and then
+    // blocks until someone clicks it. Hand the link back instead of the hang.
+    const text = `${e?.stdout || ''}\n${e?.stderr || ''}`;
+    const link = text.match(/https:\/\/login\.tailscale\.com\/\S+/)?.[0];
+    if (link) {
+      const what = /serve is not enabled/i.test(text) ? 'Serve is not enabled on your tailnet' : /https/i.test(text) ? 'HTTPS certificates are not enabled on your tailnet' : 'Tailscale needs a one-time setting';
+      const err = new Error(`${what}. Enable it here, then run this again:\n\n    ${link}`);
+      err.link = link;
+      throw err;
+    }
+    throw new Error(text.trim().split('\n').filter(Boolean).pop() || e.message);
+  }
 }

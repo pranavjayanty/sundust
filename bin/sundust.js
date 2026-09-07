@@ -273,9 +273,8 @@ switch (cmd) {
         console.log(`\n  ${C.g('✓')} serving the console over your tailnet\n\n    ${C.c(url)}\n`);
         console.log(C.dim(`  Open that on a device that is on your tailnet, then “Add to Home Screen”.\n  Only ${dnsName} is allowed through; the server still binds to 127.0.0.1.\n  Undo with: tailscale serve --bg off · sundust remote remove ${dnsName}\n`));
       } catch (e) {
-        const msg = String(e.message || e);
-        console.error(C.r(`  ${msg}`));
-        if (/HTTPS|cert/i.test(msg)) console.log(C.dim('  Enable HTTPS certificates for your tailnet: https://login.tailscale.com/admin/dns'));
+        console.error(`\n  ${C.y('!')} ${String(e.message || e)}\n`);
+        if (e.link) console.log(C.dim('  That page is your Tailscale admin console; it takes one click. Nothing else is needed.\n'));
         process.exit(1);
       }
       break;
