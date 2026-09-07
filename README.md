@@ -277,6 +277,33 @@ Borrowed from Fleet Deck: the rule that the tool must never become a dependency
 of the loop it observes (Sundust only ever reads harness state), and its conflict
 awareness (the scheduler refuses to run where a human already is).
 
+## Keeping unattended runs authenticated
+
+Two different credentials, and the difference matters for a scheduler:
+
+| | `claude auth login` | `claude setup-token` |
+|---|---|---|
+| Lifetime | 8–12 hours, auto-refreshed | about a year |
+| Built for | Sitting at the keyboard | Headless and unattended |
+| Delivered as | Keychain entry | `CLAUDE_CODE_OAUTH_TOKEN` |
+
+An interactive login is the wrong footing for overnight work: when its refresh
+fails, every scheduled run fails with it. Prefer a long-lived token, and export
+it in whatever shell you start Sundust from — it reaches runs through the
+process environment, so a daemon launched from launchd or another terminal
+will not see a token exported only in your interactive shell.
+
+Sundust checks both up front: it reports a signed-out harness before anything
+runs, and separately warns when a harness is signed in but the process holds no
+long-lived token, because that combination works today and stops working
+tomorrow.
+
+If a login appears to succeed but nothing changes, inspect the stored record
+rather than its timestamp — a hollow entry (`accessToken: ""`) reads as
+"present" while being useless. Deleting the Keychain item
+(`security delete-generic-password -s "Claude Code-credentials"`) and signing in
+again clears that state.
+
 ## Requirements
 
 - Node 20+

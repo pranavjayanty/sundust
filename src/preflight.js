@@ -45,10 +45,26 @@ export function harnessAuth(harnessId) {
   return value;
 }
 
+/**
+ * A long-lived token (`claude setup-token`) is delivered through the
+ * environment, so unattended runs only see it if the Sundust process itself was
+ * started from a shell that exports it. Started from launchd, or a different
+ * terminal, and the agents are silently unauthenticated — worth saying out loud.
+ */
+export function tokenEnv(harnessId = 'claude-code') {
+  const vars = { 'claude-code': ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'] };
+  const names = vars[harnessId] || [];
+  const present = names.filter((n) => (process.env[n] || '').trim().length > 0);
+  return { names, present, has: present.length > 0 };
+}
+
 /** One line per harness that any non-archived project actually uses. */
 export function preflight(projects) {
   const inUse = [...new Set(projects.filter((p) => !p.archived).map((p) => p.harness).filter(Boolean))];
-  return inUse.map(harnessAuth).filter((r) => r.known);
+  return inUse.map((id) => {
+    const r = harnessAuth(id);
+    return r.known ? { ...r, token: tokenEnv(id) } : r;
+  }).filter((r) => r.known);
 }
 
 /** The single sentence worth putting at the top of the console, if any. */
@@ -59,5 +75,17 @@ export function authBlocker(results) {
   if (r.method === 'not-installed') {
     return `The ${r.label} binary "${r.bin}" is not on PATH, so its scheduled runs cannot start.`;
   }
-  return `${r.label} is signed out, so scheduled runs will fail. Run \`${r.bin} auth login\` — or \`${r.bin} setup-token\` for a long-lived token better suited to unattended runs.`;
+  return `${r.label} is signed out, so scheduled runs will fail. Run \`${r.bin} setup-token\` for a year-long token suited to unattended runs, or \`${r.bin} auth login\` for an interactive session that expires in hours.`;
+}
+
+/**
+ * Signed in interactively but with no long-lived token in this process's
+ * environment: runs work now and stop working within a day.
+ */
+export function tokenAdvice(results) {
+  const r = results.find((x) => x.ok && x.token && !x.token.has);
+  if (!r) return null;
+  return `${r.label} is signed in, but this process has no ${r.token.names[0]}. `
+    + `An interactive session expires within hours — run \`${r.bin} setup-token\` and export it `
+    + `in the shell you start Sundust from, so unattended runs keep working.`;
 }

@@ -18,7 +18,7 @@ import { stateOf, stateList } from './states.js';
 import { harnessList, DEFAULT_HARNESS } from './harnesses.js';
 import { readUsage } from './usage.js';
 import { isRepo } from './checkpoint.js';
-import { preflight, authBlocker } from './preflight.js';
+import { preflight, authBlocker, tokenAdvice } from './preflight.js';
 import { linksFor } from './deeplink.js';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
@@ -142,7 +142,7 @@ export function buildState() {
   // nothing about whether unattended runs will.
   const allRuns = recentRuns(30);
   const auth = preflight(projects);
-  const authWarn = authBlocker(auth);
+  const authWarn = authBlocker(auth) || tokenAdvice(auth);
 
   // Edits made while you were away, waiting on a yes or a no.
   const review = [];
