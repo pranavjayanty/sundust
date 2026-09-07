@@ -8,8 +8,6 @@
 import { $, el, modKey } from './lib/dom.js';
 import { getState } from './lib/api.js';
 import { store, setData, setView, subscribe } from './lib/store.js';
-import { startField } from './field.js';
-import { attachDots, attachRings, attachHatch } from './marks.js';
 
 import { initTheme, toggleTheme } from './ui/theme.js';
 import { fail } from './ui/toast.js';
@@ -19,45 +17,32 @@ import { initHelp, openHelp } from './ui/help.js';
 import { initDrawer } from './ui/drawer.js';
 
 import { renderWarn } from './views/warn.js';
-import { renderLede } from './views/lede.js';
+import { renderSidebar, closeMobile } from './views/sidebar.js';
+import { renderStats } from './views/stats.js';
 import { renderReview } from './views/review.js';
 import { renderRoster } from './views/roster.js';
 import { renderSchedule } from './views/schedule.js';
-import { renderPanels, renderAdoptable, renderFoot } from './views/panels.js';
-
-/* ------------------------------------------------------------------ marks */
-const MARKS = {
-  dots: (c) => attachDots(c, { gap: 7, pull: 6, radius: 110 }),
-  rings: (c) => attachRings(c, { count: 7, pull: 9, radius: 120 }),
-  hatch: (c) => attachHatch(c, { gap: 5, pull: 8, radius: 110 })
-};
-const bound = new WeakSet();
-function bindMarks() {
-  for (const c of document.querySelectorAll('canvas.secmark')) {
-    if (bound.has(c)) continue;
-    bound.add(c);
-    (MARKS[c.dataset.mark] || MARKS.dots)(c);
-  }
-}
+import { renderRuns, renderActivity, renderAdoptable } from './views/runs.js';
 
 /* ----------------------------------------------------------------- render */
 subscribe((s, reason) => {
   if (!s) return;
   if (reason === 'view') {
-    // a filter or a sort touches exactly two views
-    renderLede(s);
+    // a filter or a sort touches exactly these
+    renderSidebar(s, refresh);
+    renderStats(s);
     renderRoster(s);
     return;
   }
   renderWarn(s);
-  renderLede(s);
+  renderSidebar(s, refresh);
+  renderStats(s);
   renderReview(s, refresh);
   renderRoster(s);
   renderSchedule(s);
-  renderPanels(s);
+  renderRuns(s);
+  renderActivity(s);
   renderAdoptable(s, refresh);
-  renderFoot(s, refresh);
-  bindMarks();
 });
 
 /* ------------------------------------------------------------------ boot */
@@ -106,6 +91,14 @@ $('#btn-new').onclick = () => openNew();
 $('#filter').addEventListener('input', (e) => setView({ text: e.target.value }));
 $('#kbd-mod').textContent = `${modKey}K`;
 
+// mobile: the sidebar slides in over the page
+$('#btn-menu').onclick = () => {
+  const sb = $('#sidebar');
+  if (sb.classList.toggle('open')) {
+    const scrim = el('div', 'scrim'); scrim.onclick = closeMobile; document.body.append(scrim);
+  } else closeMobile();
+};
+
 addEventListener('keydown', (e) => {
   const typing = /input|textarea|select/i.test(document.activeElement?.tagName || '');
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); return openPalette(); }
@@ -121,8 +114,6 @@ initDialogs(refresh);
 initPalette(refresh);
 initHelp();
 initDrawer(refresh);
-startField($('#field'));
-bindMarks();
 schedule();
 connectStream();
 refresh();

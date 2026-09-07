@@ -2,7 +2,7 @@
    applied before first paint by an inline script in the document head, so
    there is no flash; this module only handles changing it afterwards. */
 
-import { $ } from '../lib/dom.js';
+import { $, clear, icon } from '../lib/dom.js';
 
 const KEY = 'sundust-theme';
 const watchers = new Set();
@@ -24,11 +24,7 @@ function paintIcon() {
   const btn = $('#btn-theme');
   if (!btn) return;
   const dark = currentTheme() === 'dark';
-  btn.innerHTML =
-    `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-       <circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
-       <path d="M8 1.6 A6.4 6.4 0 0 ${dark ? 1 : 0} 8 14.4 Z" fill="currentColor"/>
-     </svg>`;
+  clear(btn).append(icon(dark ? 'sun' : 'moon'));
   btn.setAttribute('aria-label', `Switch to ${dark ? 'light' : 'dark'} theme`);
   btn.title = `Switch to ${dark ? 'light' : 'dark'} theme (t)`;
 }

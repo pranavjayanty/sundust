@@ -6,7 +6,7 @@
    were, then what you can run, then what you can create. Results are grouped
    and the footer states the keys. */
 
-import { $, el, elx, clear, modKey } from '../lib/dom.js';
+import { $, el, elx, clear, modKey, icon } from '../lib/dom.js';
 import { firstLine } from '../lib/format.js';
 import { store } from '../lib/store.js';
 import { post } from '../lib/api.js';
@@ -59,13 +59,13 @@ function items() {
   const out = [];
 
   for (const it of pendingItems(s)) {
-    out.push({ group: 'Needs you', hot: true, icon: '›',
+    out.push({ group: 'Needs you', hot: true, icon: 'inbox',
       kind: it.kind === 'failure' ? 'failed' : 'waiting',
       label: `${it.project} · ${it.text}`, run: () => openLink(it.link) });
   }
 
   for (const p of s.projects) {
-    out.push({ group: 'Projects', icon: '›', kind: p.stateLabel.toLowerCase(),
+    out.push({ group: 'Projects', icon: 'folder', kind: p.stateLabel.toLowerCase(),
       label: p.name, run: () => openDrawer(p.id) });
   }
 
@@ -73,7 +73,7 @@ function items() {
     // a session that needs input used to be filtered out of this list entirely,
     // which removed exactly the ones worth reopening
     for (const x of p.sessions.slice(0, 8)) {
-      out.push({ group: 'Sessions', icon: x.live ? '◆' : '·', kind: p.name, hot: x.needsInput,
+      out.push({ group: 'Sessions', icon: 'message', kind: p.name, hot: x.needsInput,
         label: `${firstLine(x.title, 90) || 'untitled session'}${x.needsInput ? '  — waiting on you' : ''}`,
         run: () => openLink(x.link) });
     }
@@ -81,7 +81,7 @@ function items() {
 
   for (const p of s.projects) {
     for (const t of (p.agenda || []).filter((v) => v.source !== 'claude')) {
-      out.push({ group: 'Run a task', icon: '▸', kind: p.name, label: t.title,
+      out.push({ group: 'Run a task', icon: 'play', kind: p.name, label: t.title,
         run: async () => {
           try { await post('/api/run', { projectId: p.id, taskId: t.id }); toast(`running “${t.title}”`); refresh(); }
           catch (e) { fail(e); }
@@ -90,11 +90,11 @@ function items() {
   }
 
   for (const t of s.templates) {
-    out.push({ group: 'New project', icon: '+', kind: 'scaffold', label: t.label,
+    out.push({ group: 'New project', icon: 'plus', kind: 'scaffold', label: t.label,
       run: () => openNew(t.id) });
   }
 
-  out.push({ group: 'View', icon: '◐', kind: 'theme',
+  out.push({ group: 'View', icon: currentTheme() === 'dark' ? 'sun' : 'moon', kind: 'theme',
     label: `Switch to ${currentTheme() === 'dark' ? 'light' : 'dark'} theme`, run: toggleTheme });
 
   return out;
@@ -128,8 +128,7 @@ function paint() {
     if (item.group !== group) { group = item.group; list.append(el('div', 'pal-group', group)); }
     const row = elx('div', `pal-item${item.hot ? ' hot' : ''}`, null,
       { role: 'option', 'aria-selected': String(n === idx) });
-    row.append(el('span', 'ic', item.icon), el('span', 'ptxt', item.label),
-      el('span', 'kind', item.kind));
+    row.append(icon(item.icon), el('span', 'ptxt', item.label), el('span', 'kind', item.kind));
     row.onclick = () => run(item);
     list.append(row);
     if (n === idx) queueMicrotask(() => row.scrollIntoView({ block: 'nearest' }));

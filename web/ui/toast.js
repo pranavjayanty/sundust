@@ -5,7 +5,7 @@
    after six seconds — an error nobody read is not an error that got handled,
    so failures stay until they are closed. */
 
-import { $, el, elx } from '../lib/dom.js';
+import { $, el, elx, icon } from '../lib/dom.js';
 
 const host = () => $('#toasts');
 
@@ -15,7 +15,8 @@ export function toast(msg, isError = false) {
   const t = el('div', `toast${isError ? ' bad' : ''}`);
   t.append(el('span', 'tmsg', String(msg)));
 
-  const close = elx('button', 'btn quiet sm', '✕', { type: 'button', 'aria-label': 'Dismiss' });
+  const close = elx('button', 'btn ghost sm icon', null, { type: 'button', 'aria-label': 'Dismiss' });
+  close.append(icon('x'));
   close.onclick = () => t.remove();
   t.append(close);
 

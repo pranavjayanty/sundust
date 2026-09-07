@@ -13,12 +13,13 @@ const DAYS = 7;
 
 export function renderSchedule(s) {
   const host = clear($('#sched'));
+  host.classList.add('sched');
   const events = s.upcoming || [];
   $('#sched-count').textContent = events.length ? plural(events.length, 'run') : '';
 
   if (!events.length) {
     host.append(el('div', 'sched-empty',
-      'Nothing scheduled. Give a project an agenda task and it will run on its own.'));
+      'Nothing scheduled. Add an agenda task to a project and it will run on its own.'));
     return;
   }
 

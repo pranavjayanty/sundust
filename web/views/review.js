@@ -33,7 +33,7 @@ export function renderReview(s, refresh) {
     for (const f of r.files.slice(0, 8)) {
       const chip = el('span', 'f', f.path);
       if (f.insertions != null) {
-        chip.append(el('i', 'add', `+${f.insertions}`), el('i', null, `−${f.deletions}`));
+        chip.append(el('i', 'add', `+${f.insertions}`), el('i', 'del', `−${f.deletions}`));
       }
       files.append(chip);
     }
@@ -45,7 +45,7 @@ export function renderReview(s, refresh) {
 
     const go = el('div', 'go');
     go.append(
-      act('Keep', 'solid', `Accept the edits ${r.task} made in ${r.project}`, async () => {
+      act('Keep', 'primary', `Accept the edits ${r.task} made in ${r.project}`, async () => {
         await post('/api/review', { projectId: r.projectId, runId: r.runId, action: 'keep' });
         toast(`kept ${plural(r.files.length, 'file')} in ${r.project}`);
         refresh();

@@ -8,17 +8,22 @@
    and change its autonomy. This is what separates mission control from a
    list of links back into the harness. */
 
-import { $, el, elx, clear } from '../lib/dom.js';
+import { $, el, elx, clear, icon } from '../lib/dom.js';
 import { ago, until, short, plural, firstLine, stamp, money } from '../lib/format.js';
 import { api, post } from '../lib/api.js';
 import { store, subscribe } from '../lib/store.js';
-import { pendingFor, markSuperseded } from '../lib/derive.js';
+import { pendingFor, markSuperseded, stateLabel, tileFor } from '../lib/derive.js';
 import { toast, fail } from './toast.js';
 import { openLink } from './links.js';
 import { closeDialogs, openRun } from './dialogs.js';
 
 let current = null;
+let tab = 'overview';
 let refresh = () => {};
+const TABS = [
+  ['overview', 'Overview', 'grid'], ['sessions', 'Sessions', 'message'], ['agenda', 'Agenda', 'calendar'],
+  ['runs', 'Runs', 'terminal'], ['notes', 'Notes', 'notes'], ['settings', 'Settings', 'settings']
+];
 const drafts = new Map();          // textarea text survives a re-render
 const openReplies = new Set();     // which session reply boxes are showing
 const notes = new Map();           // projectId -> { count, text }
@@ -41,9 +46,11 @@ export function initDrawer(onRefresh) {
   subscribe((s, reason) => { if (reason === 'data' && current && dlg.open) build(); });
 }
 
-export function openDrawer(projectId, { focus } = {}) {
+export function openDrawer(projectId, { focus, tab: wanted } = {}) {
+  const fresh = current !== projectId;
   current = projectId;
   confirmRemove = false;
+  if (wanted) tab = wanted; else if (fresh) tab = 'overview';
   const dlg = $('#dlg-project');
   build();
   if (!dlg.open) { closeDialogs(); dlg.showModal(); }
@@ -61,30 +68,66 @@ function build() {
   if (!p) { $('#dlg-project').close(); return; }
 
   header(p, s);
+  tabs(p, s);
   const body = $('#dr-body');
   const keep = body.scrollTop;
   clear(body);
-  body.append(
-    secAsks(p, s), secSessions(p), secAgenda(p), secRuns(p), secEvents(p, s), secNotes(p), secSettings(p, s)
-  );
+  switch (tab) {
+    case 'sessions': body.append(secSessions(p)); break;
+    case 'agenda': body.append(secAgenda(p)); break;
+    case 'runs': body.append(secRuns(p)); break;
+    case 'notes': body.append(secNotes(p), secEvents(p, s)); loadNotes(p); break;
+    case 'settings': body.append(secSettings(p, s)); break;
+    default: body.append(secAsks(p, s), overview(p, s));
+  }
   body.scrollTop = keep;
-  loadNotes(p);
+}
+
+function tabs(p, s) {
+  const host = clear($('#dr-tabs'));
+  const mine = pendingFor(s, p.id).length;
+  const counts = { overview: mine, sessions: p.sessions.length, agenda: (p.agenda || []).length, runs: (p.runs || []).length,
+    notes: (p.notes || 0) + (s.events || []).filter((e) => e.fromProject === p.id).length };
+  for (const [id, label, ic] of TABS) {
+    const b = elx('button', `tab${id === 'overview' && mine ? ' hot' : ''}`, null, { type: 'button', role: 'tab', 'aria-selected': String(tab === id) });
+    b.append(icon(ic), el('span', null, label));
+    if (counts[id]) b.append(el('span', 'count', String(counts[id])));
+    b.onclick = () => { tab = id; build(); };
+    host.append(b);
+  }
+}
+
+/** The overview tab: the state of things, and the numbers that matter. */
+function overview(p, s) {
+  const sec = section('At a glance');
+  const g = el('div', 'kv');
+  const live = p.sessions.filter((x) => x.live).length;
+  const rows = [
+    ['Status', stateLabel(p.state)],
+    ['Sessions', `${p.sessionCount}${live ? ` · ${live} live` : ''}`],
+    ['Agenda', (p.agenda || []).length ? `${plural((p.agenda || []).length, 'task')}${p.nextAt ? ` · next in ${until(p.nextAt)}` : ''}` : 'no tasks'],
+    ['Last run', (p.runs || [])[0] ? `${(p.runs[0].ok ? 'ok' : 'failed')} · ${ago(p.runs[0].endedAt || p.runs[0].startedAt)} ago` : 'never'],
+    ['Autonomy', p.autonomy],
+    ['Unattended spend', p.costUsd > 0 ? money(p.costUsd) : '—']
+  ];
+  for (const [k, v] of rows) g.append(el('span', 'k', k), el('span', 'v', v));
+  sec.append(g);
+  return sec;
 }
 
 function header(p, s) {
-  const dot = $('#dr-dot');
-  dot.className = `st ${p.tone}`;
+  const tile = $('#dr-tile'); const t = tileFor(p);
+  tile.textContent = t.glyph; if (t.color) tile.style.setProperty('--tile', t.color); else tile.style.removeProperty('--tile');
   $('#dr-h').textContent = p.name;
   $('#dr-h').title = p.name;
 
   const meta = clear($('#dr-meta'));
-  const stateMeta = s.states.find((x) => x.id === p.state);
-  meta.append(pair(p.stateLabel, stateMeta?.detail));
-  meta.append(pair(short(p.path), 'Where the project lives'));
+  const badge = el('span', `badge ${p.state}`); badge.append(el('i'), document.createTextNode(stateLabel(p.state)));
+  badge.title = s.states.find((x) => x.id === p.state)?.detail || '';
+  meta.append(badge);
+  meta.append(pair(short(p.path), 'Where the project lives', true));
   meta.append(pair(s.harnesses.find((h) => h.id === p.harness)?.label || p.harness, 'The harness that runs it'));
-  meta.append(pair(`autonomy · ${p.autonomy}`, 'What unattended runs may do here — change it under Settings'));
   meta.append(pair(`active ${ago(p.lastActivity)} ago`, stamp(p.lastActivity)));
-  if (p.costUsd > 0) meta.append(pair(`${money(p.costUsd)} unattended`, 'Cost of headless runs in this project'));
 
   const tools = clear($('#dr-tools'));
   const mine = pendingFor(s, p.id);
@@ -93,22 +136,22 @@ function header(p, s) {
     : live ? ['Open live session', live.link, 'Open the session that is running right now']
       : ['New session', p.links.open, 'Start a new session in this folder'];
   tools.append(
-    action(jump[0], 'primary', jump[2], () => openLink(jump[1])),
-    action('New session', '', 'Start a fresh session in this folder', () => openLink(p.links.open)),
-    action('Run now', '', 'Run something headless here', () => openRun(p)),
-    action('Reveal', '', `Show ${short(p.path)} in the Finder`, () => openLink(p.links.reveal)),
+    action(jump[0], 'primary', jump[2], () => openLink(jump[1]), 'external'),
+    action('New session', 'secondary', 'Start a fresh session in this folder', () => openLink(p.links.open), 'plus'),
+    action('Run now', 'secondary', 'Run something headless here', () => openRun(p), 'play'),
+    action('Reveal', 'ghost', `Show ${short(p.path)} in the Finder`, () => openLink(p.links.reveal), 'folder'),
     el('span', 'spacer'),
-    action(p.pinned ? 'Unpin' : 'Pin', p.pinned ? 'solid' : '',
-      p.pinned ? 'Stop keeping this project at the top of its group' : 'Keep this project at the top of its group',
-      () => patch(p, { pinned: !p.pinned })),
-    action(p.archived ? 'Unarchive' : 'Archive', '',
-      p.archived ? 'Bring this project back into the counts' : 'Shelve it: nothing runs, it leaves the counts',
-      () => patch(p, { archived: !p.archived }))
+    action(null, p.pinned ? 'secondary' : 'ghost',
+      p.pinned ? 'Pinned — click to unpin' : 'Pin this project to the top of its group',
+      () => patch(p, { pinned: !p.pinned }), 'pin'),
+    action(null, p.archived ? 'secondary' : 'ghost',
+      p.archived ? 'Archived — click to bring it back' : 'Archive: nothing runs, it leaves the counts',
+      () => patch(p, { archived: !p.archived }), 'archive')
   );
 }
 
-function pair(text, title) {
-  const b = el('b', null, text);
+function pair(text, title, mono) {
+  const b = el('span', mono ? 'mono' : '', text);
   if (title) b.title = title;
   return b;
 }
@@ -116,7 +159,7 @@ function pair(text, title) {
 /* ------------------------------------------------------------ needs you */
 function secAsks(p, s) {
   const mine = pendingFor(s, p.id);
-  const sec = section('Needs you', mine.length ? `${mine.length}` : '', mine.length > 0);
+  const sec = section('Needs you', mine.length ? `${mine.length}` : '');
   if (!mine.length) { sec.append(el('div', 'none', 'Nothing is waiting on you here.')); return sec; }
 
   for (const it of mine) {
@@ -150,8 +193,8 @@ function secAsks(p, s) {
     } else {
       box.append(el('div', 'q', it.text));
       box.append(el('div', 'from', 'the last unattended run failed — see Runs for the full error'));
-      const row = el('div', 'row end');
-      row.append(action('Open in app', 'solid', 'Open the project in the app', () => openLink(it.link)));
+      const row = el('div'); row.style.cssText = 'display:flex;justify-content:flex-end';
+      row.append(action('Open in app', 'secondary', 'Open the project in the app', () => openLink(it.link), 'external'));
       box.append(row);
     }
     sec.append(box);
@@ -170,8 +213,8 @@ function replyBox(p, { key, sessionId, askId, title, placeholder, link, note }) 
 
   const row = el('div', 'row');
   if (note) row.append(el('span', 'note', note));
-  if (link) row.append(action('Open in app', '', 'Continue it yourself, in the app', () => openLink(link)));
-  const go = action('Send & continue', 'primary', 'Continue the session headless with this message (⌘↵)', send);
+  if (link) row.append(action('Open in app', 'ghost', 'Continue it yourself, in the app', () => openLink(link), 'external'));
+  const go = action('Send & continue', 'primary', 'Continue the session headless with this message (⌘↵)', send, 'send');
   if (!sessionId || p.autonomy === 'off') {
     go.disabled = true;
     go.title = !sessionId ? 'This session cannot be resumed headlessly'
@@ -200,16 +243,17 @@ function replyBox(p, { key, sessionId, askId, title, placeholder, link, note }) 
 function secSessions(p) {
   const sec = section('Sessions', plural(p.sessions.length, 'transcript'));
   if (!p.sessions.length) { sec.append(el('div', 'none', 'No sessions here yet.')); return sec; }
+  const list = el('div', 'list'); sec.append(list);
 
   const order = [...p.sessions].sort((a, b) =>
     (b.needsInput - a.needsInput) || (b.live - a.live) || (b.lastActivity - a.lastActivity));
 
   for (const x of order) {
     const key = `sess:${x.id}`;
-    const row = el('div', 'dr-sess');
-    row.append(elx('i', `st ${x.needsInput ? 'attention' : x.live ? 'running' : ''}`, null, { 'aria-hidden': 'true' }));
+    const row = el('div', 'item');
+    row.append(elx('i', `dot ${x.needsInput ? 'blocked' : x.live ? 'running' : 'idle'}`, null, { 'aria-hidden': 'true' }));
 
-    const body = el('div', 'sbody');
+    const body = el('div', 'body');
     body.append(el('b', null, firstLine(x.title, 140) || 'untitled session'));
     const bits = [];
     if (x.needsInput) bits.push('waiting on you'); else if (x.live) bits.push('live');
@@ -217,16 +261,16 @@ function secSessions(p) {
     if (x.humanTurns) bits.push(plural(x.humanTurns, 'turn'));
     if (x.toolCalls) bits.push(`${x.toolCalls} tool calls`);
     if (x.gitBranch) bits.push(x.gitBranch);
-    body.append(el('span', 'smeta', bits.join(' · ')));
+    body.append(el('span', 'meta', bits.join(' · ')));
     row.append(body);
 
-    const go = el('div', 'sgo');
-    go.append(action('Open', x.needsInput ? 'solid' : '', 'Reopen this session in the app where it left off',
-      () => openLink(x.link)));
-    const cont = action(openReplies.has(key) ? 'Cancel' : 'Continue…', '',
+    const go = el('div', 'go');
+    go.append(action('Open', x.needsInput ? 'secondary' : 'ghost', 'Reopen this session in the app where it left off',
+      () => openLink(x.link), 'external'));
+    const cont = action(openReplies.has(key) ? 'Cancel' : 'Continue', 'ghost',
       'Send this session a message and let it continue headless',
       () => { openReplies.has(key) ? openReplies.delete(key) : openReplies.add(key); build();
-        if (openReplies.has(key)) $(`#dlg-project textarea[data-key="${CSS.escape(key)}"]`)?.focus(); });
+        if (openReplies.has(key)) $(`#dlg-project textarea[data-key="${CSS.escape(key)}"]`)?.focus(); }, openReplies.has(key) ? 'x' : 'send');
     cont.setAttribute('aria-expanded', String(openReplies.has(key)));
     go.append(cont);
     row.append(go);
@@ -234,10 +278,11 @@ function secSessions(p) {
     if (openReplies.has(key)) {
       const rb = replyBox(p, { key, sessionId: x.id, title: `Continue · ${firstLine(x.title, 40)}`,
         placeholder: 'What should it do next?', note: 'Runs headless in this session.' });
+      rb.classList.add('full');
       rb.querySelector('textarea').dataset.key = key;
       row.append(rb);
     }
-    sec.append(row);
+    list.append(row);
   }
   return sec;
 }
@@ -255,20 +300,21 @@ function secAgenda(p) {
     sec.append(el('div', 'none', 'No tasks. Add one below and it runs on its own, headless, in this folder.'));
   }
 
-  for (const t of own) sec.append(taskRow(p, t, own));
-  for (const t of theirs) {
-    const r = taskRow(p, t, own, true);
-    sec.append(r);
+  if (own.length || theirs.length) {
+    const list = el('div', 'list');
+    for (const t of own) list.append(taskRow(p, t, own));
+    for (const t of theirs) list.append(taskRow(p, t, own, true));
+    sec.append(list);
   }
   sec.append(addTask(p, own));
   return sec;
 }
 
 function taskRow(p, t, own, readOnly = false) {
-  const row = el('div', 'task');
+  const row = el('div', 'item');
 
   if (readOnly) {
-    row.append(elx('span', 'tag', 'claude', { title: 'Scheduled by Claude Code itself; Sundust shows it but does not own it' }));
+    row.append(elx('span', 'badge accent', 'claude', { title: 'Scheduled by Claude Code itself; Sundust shows it but does not own it' }));
   } else {
     const tg = elx('button', 'toggle', null, { type: 'button', role: 'switch',
       'aria-checked': String(t.enabled !== false), 'aria-label': `${t.title} enabled` });
@@ -277,11 +323,11 @@ function taskRow(p, t, own, readOnly = false) {
     row.append(tg);
   }
 
-  const body = el('div', 'tbody');
+  const body = el('div', 'body');
   const b = el('b', t.enabled === false ? 'off' : '', t.title);
   b.title = t.prompt || '';
   body.append(b);
-  const meta = el('div', 'tmeta');
+  const meta = el('div', 'meta');
   meta.append(el('span', null, t.human || t.schedule || 'manual'));
   if (t.priority && t.priority !== 'normal') {
     meta.append(elx('span', `pri ${t.priority}`, t.priority,
@@ -292,16 +338,16 @@ function taskRow(p, t, own, readOnly = false) {
   body.append(meta);
   row.append(body);
 
-  const go = el('div', 'tgo');
+  const go = el('div', 'go');
   if (t.prompt) {
-    go.append(action('Run', '', 'Run this task now, headless', async () => {
+    go.append(action('Run', 'ghost', 'Run this task now, headless', async () => {
       try { await post('/api/run', { projectId: p.id, taskId: t.id }); toast(`running “${t.title}”`); refresh(); }
       catch (e) { fail(e); }
-    }));
+    }, 'play'));
   }
   if (!readOnly) {
-    go.append(action('Remove', 'quiet', 'Remove this task from the agenda',
-      () => saveAgenda(p, own.filter((x) => x.id !== t.id))));
+    go.append(action(null, 'ghost', 'Remove this task from the agenda',
+      () => saveAgenda(p, own.filter((x) => x.id !== t.id)), 'x'));
   }
   row.append(go);
   return row;
@@ -311,7 +357,7 @@ function addTask(p, own) {
   const d = el('details', 'addtask');
   d.open = drafts.get(`add:${p.id}:open`) === 'y';
   d.ontoggle = () => drafts.set(`add:${p.id}:open`, d.open ? 'y' : 'n');
-  d.append(el('summary', null, 'Add a task'));
+  const sm = el('summary'); sm.append(icon('plus'), el('span', null, 'Add a task')); d.append(sm);
 
   const key = (k) => `add:${p.id}:${k}`;
   const field = (label, k, node) => {
@@ -332,7 +378,7 @@ function addTask(p, own) {
     placeholder: 'What the agent should do each time. Be specific about what to look at and what to report.' });
 
   d.append(field('Title', 'title', title));
-  const two = el('div', 'field inline');
+  const two = el('div', 'field-row');
   const sf = field('Schedule (cron)', 'sched', sched);
   sf.title = 'minute hour day-of-month month day-of-week';
   const pf = field('Priority', 'pri', pri);
@@ -342,13 +388,13 @@ function addTask(p, own) {
 
   const presets = el('div', 'presets');
   for (const [label, cron] of PRESETS) {
-    presets.append(action(label, 'sm quiet', cron, () => { sched.value = cron; drafts.set(key('sched'), cron); }));
+    presets.append(action(label, 'secondary sm', cron, () => { sched.value = cron; drafts.set(key('sched'), cron); }));
   }
   d.append(presets);
   d.append(field('Prompt', 'prompt', prompt));
 
-  const row = el('div', 'row end');
-  row.append(action('Add to agenda', 'solid', 'Save this task; it fires on its cron from now on', async () => {
+  const row = el('div', 'row'); row.style.cssText = 'display:flex;justify-content:flex-end';
+  row.append(action('Add to agenda', 'primary', 'Save this task; it fires on its cron from now on', async () => {
     const t = { id: crypto.randomUUID(), enabled: true,
       title: title.value.trim(), schedule: sched.value.trim(), prompt: prompt.value.trim(), priority: pri.value };
     if (!t.title || !t.schedule || !t.prompt) return toast('a task needs a title, a schedule and a prompt', true);
@@ -366,18 +412,19 @@ function secRuns(p) {
   const runs = markSuperseded(p.runs || []);
   const sec = section('Runs', runs.length ? plural(runs.length, 'recent') : '');
   if (!runs.length) { sec.append(el('div', 'none', 'No unattended runs here yet.')); return sec; }
+  const list = el('div', 'list'); sec.append(list);
 
   for (const r of runs) {
-    const box = el('div', 'run');
-    const top = el('div', 'rtop');
-    top.append(el('b', null, `${r.resumed ? '↩ ' : ''}${r.taskTitle}`));
+    const box = el('div', 'item');
     const status = r.state === 'running' ? 'running' : r.ok ? 'ok' : 'failed';
-    const ok = el('span', `ok${status === 'failed' && !r.superseded ? ' bad' : ''}`, status);
-    if (r.superseded) ok.title = 'A later run here succeeded, so this failure is history';
-    top.append(ok, el('span', 'when', `${ago(r.endedAt || r.startedAt)} ago`));
-    box.append(top);
-
-    const meta = el('div', 'rmeta');
+    const badge = el('span', `badge ${status === 'ok' ? 'running' : status === 'running' ? 'scheduled' : r.superseded ? 'idle' : 'failed'}`);
+    badge.append(el('i'), document.createTextNode(status));
+    if (r.superseded) badge.title = 'A later run here succeeded, so this failure is history';
+    box.append(badge);
+    const body = el('div', 'body');
+    body.append(el('b', null, `${r.resumed ? '↩ ' : ''}${r.taskTitle}`));
+    const meta = el('div', 'meta');
+    meta.append(el('span', null, `${ago(r.endedAt || r.startedAt)} ago`));
     if (r.costUsd) meta.append(el('span', null, money(r.costUsd)));
     if (r.turns) meta.append(el('span', null, plural(r.turns, 'turn')));
     if (r.trigger) meta.append(el('span', null, r.trigger));
@@ -385,15 +432,16 @@ function secRuns(p) {
       meta.append(el('span', null, `${plural(r.changes.files.length, 'file')} changed${r.reviewed ? '' : ' · in Review'}`));
     }
     if (r.denials) meta.append(el('span', null, `${r.denials} denied`));
-    box.append(meta);
+    body.append(meta);
+    box.append(body, el('span'));
 
     if (r.summary || r.error) {
-      const d = el('details');
-      d.append(el('summary', null, r.error ? 'error' : 'what it did'));
+      const d = el('details', 'full');
+      d.append(el('summary', null, r.error ? 'Error' : 'What it did'));
       d.append(el('pre', r.error ? 'err' : '', r.error || r.summary));
       box.append(d);
     }
-    sec.append(box);
+    list.append(box);
   }
   return sec;
 }
@@ -408,18 +456,20 @@ function secEvents(p, s) {
   if (!mine.length && !subs.length) return el('span');   // nothing to say, no section
   const sec = section('Events', mine.length ? plural(mine.length, 'recent') : '');
   if (subs.length) sec.append(el('div', 'none', `Listens for: ${subs.join(', ')}`));
+  const list = el('div', 'list');
   for (const e of mine.slice(0, 12)) {
-    const box = el('div', 'run');
-    const top = el('div', 'rtop');
-    top.append(el('b', null, `${e.fromProject === p.id ? '↗' : '↘'} ${e.event}`));
-    top.append(el('span', 'ok', e.consumed ? 'handled' : 'pending'), el('span', 'when', `${ago(e.at)} ago`));
-    box.append(top);
-    const meta = el('div', 'rmeta');
-    meta.append(el('span', null, e.fromProject === p.id ? 'raised here' : `from ${e.fromName}`));
+    const box = el('div', 'item');
+    const badge = el('span', `badge ${e.consumed ? 'idle' : 'scheduled'}`); badge.append(el('i'), document.createTextNode(e.consumed ? 'handled' : 'pending'));
+    box.append(badge);
+    const body = el('div', 'body');
+    body.append(el('b', null, `${e.fromProject === p.id ? '↗' : '↘'} ${e.event}`));
+    const meta = el('div', 'meta');
+    meta.append(el('span', null, e.fromProject === p.id ? 'raised here' : `from ${e.fromName}`), el('span', null, `${ago(e.at)} ago`));
     if (e.context) meta.append(el('span', null, firstLine(e.context, 120)));
-    box.append(meta);
-    sec.append(box);
+    body.append(meta); box.append(body, el('span'));
+    list.append(box);
   }
+  if (mine.length) sec.append(list);
   return sec;
 }
 
@@ -440,7 +490,7 @@ async function loadNotes(p) {
   try {
     const { text } = await api(`/api/notes?project=${encodeURIComponent(p.id)}`);
     notes.set(p.id, { count: p.notes, text });
-    const pre = $('#dr-body .dr-sec[data-notes] pre');
+    const pre = $('#dr-body .sec[data-notes] pre');
     if (pre && current === p.id) pre.textContent = text;
   } catch {}
 }
@@ -448,7 +498,7 @@ async function loadNotes(p) {
 /* ------------------------------------------------------------- settings */
 function secSettings(p, s) {
   const sec = section('Settings');
-  const g = el('div', 'dr-set');
+  const g = el('div', 'kv');
 
   g.append(el('span', 'k', 'Autonomy'));
   const sel = el('select');
@@ -489,8 +539,7 @@ function secSettings(p, s) {
   g.append(el('span', 'k', 'Tracked since'), el('span', 'v', stamp(p.createdAt)));
   sec.append(g);
 
-  const row = el('div', 'row end');
-  row.style.marginTop = 'var(--s4)';
+  const row = el('div'); row.style.cssText = 'display:flex;justify-content:flex-end;margin-top:1rem';
   const rm = action(confirmRemove ? 'Yes, stop tracking' : 'Stop tracking', 'danger',
     'Remove this project from Sundust. The folder and its sessions are untouched.', async () => {
       if (!confirmRemove) { confirmRemove = true; build(); return; }
@@ -504,16 +553,18 @@ function secSettings(p, s) {
 }
 
 /* -------------------------------------------------------------- helpers */
-function section(title, tag, hot) {
-  const sec = el('section', `dr-sec${hot ? ' hot' : ''}`);
-  const h = el('h3', null, title);
-  if (tag) h.append(el('span', 'tag', tag));
+function section(title, tag) {
+  const sec = el('section', 'sec');
+  const h = el('h3', 'sec-h', title);
+  if (tag) h.append(el('span', 'count', tag));
   sec.append(h);
   return sec;
 }
 
-function action(label, variant, title, fn) {
-  const b = elx('button', `btn${variant ? ` ${variant}` : ''}`, label, { type: 'button', title });
+function action(label, variant, title, fn, ic) {
+  const b = elx('button', `btn${variant ? ` ${variant}` : ''}${label ? '' : ' icon'}`, null, { type: 'button', title });
+  if (ic) b.append(icon(ic));
+  if (label) b.append(el('span', null, label));
   b.onclick = (e) => { e.stopPropagation(); fn(); };
   return b;
 }

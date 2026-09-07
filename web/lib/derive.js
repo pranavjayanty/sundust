@@ -99,3 +99,13 @@ export function headline(s) {
   return { text: `${projects === 1 ? '1 project needs' : `${projects} projects need`} you`,
     calm: false, count: projects };
 }
+
+/** What a state is called on screen. The server says "Blocked"; a person reads "Needs you". */
+export const STATE_LABEL = { blocked: 'Needs you', running: 'Running', scheduled: 'Scheduled', idle: 'Idle', archived: 'Archived' };
+export const stateLabel = (id) => STATE_LABEL[id] || id;
+
+/** A project's tile: its emoji if it has one, else its initial, on a wash of its own accent. */
+export function tileFor(p) {
+  const glyph = p.emoji && /\p{Extended_Pictographic}/u.test(p.emoji) ? p.emoji : (p.name || '?').trim().charAt(0).toUpperCase();
+  return { glyph, color: p.accent || null };
+}

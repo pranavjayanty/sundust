@@ -1,94 +1,87 @@
 /* Sundust — design tokens.
 
-   Type is fluid. The root size grows with the viewport between 15px and 20px,
-   and every size on the page is a multiple of it, so a console that reads
-   well on a laptop is not a miniature on a 32" display. Density scales the
-   root again — compact, comfortable, spacious — and is applied before first
-   paint from localStorage.
+   Layered dark surfaces, bright text, one accent, and semantic colour for
+   status. Type is Inter on a fluid root; every size is a multiple of it. */
 
-   One ramp, two themes, and a hard rule: every step used for TEXT clears
-   4.5:1 against its background in both light and dark. --ink-mute is for
-   rules and tracks and is never used to set type. */
-
-html{font-size:clamp(15px, 0.5vw + 8px, 20px)}
-html[data-density="compact"]{font-size:clamp(13.5px, 0.42vw + 7.5px, 17px)}
-html[data-density="spacious"]{font-size:clamp(16.5px, 0.6vw + 8.5px, 22px)}
+html{font-size:clamp(15px, 0.4vw + 9.5px, 19px)}
+html[data-density="compact"]{font-size:clamp(13.5px, 0.35vw + 8.5px, 17px)}
+html[data-density="spacious"]{font-size:clamp(16.5px, 0.48vw + 10.5px, 21px)}
 
 :root{
-  --amber:#ffb020;          /* 10.8:1 — wordmark only */
-  --bad:#f8705f;            /*  7.0:1 — failure only */
+  /* surfaces */
+  --bg:#09090b;            /* page */
+  --surface:#111113;       /* cards, sidebar, panel */
+  --surface-2:#18181b;     /* nested: inputs, table head, hover rows */
+  --surface-3:#1f1f23;     /* hover on surface-2, active nav */
+  --border:#26262b;
+  --border-2:#34343b;
 
-  --bg:#0b0b0c;
-  --tint:rgba(255,255,255,.028); --tint-2:rgba(255,255,255,.055);
-  --line:rgba(255,255,255,.085); --line-2:rgba(255,255,255,.16);
+  /* text — bright. body 18:1, secondary 12:1, muted 7.5:1 */
+  --text:#fafafa;          /* 18:1 */
+  --text-2:#d9d9de;        /* 13:1 */
+  --text-3:#acacb6;        /*  8:1 — the softest colour any label is set in */
+  --text-4:#8b8b95;        /*  5.6:1 — placeholders, disabled, decorative glyphs */
 
-  --ink:#f2f2f3;            /* 17.6:1 */
-  --ink-2:#b6b6bd;          /*  9.8:1 */
-  --ink-3:#93939c;          /*  6.5:1 */
-  --ink-4:#7c7c86;          /*  4.8:1 — softest type on the page */
-  --ink-mute:#5d5d66;       /*  3.0:1 — NOT for text */
+  /* accent + semantic */
+  --accent:#818cf8; --accent-strong:#6366f1; --accent-text:#ffffff;
+  --accent-wash:rgba(99,102,241,.14);
+  --green:#4ade80; --green-wash:rgba(74,222,128,.13);
+  --amber:#fbbf24; --amber-wash:rgba(251,191,36,.14);
+  --red:#f87171;   --red-wash:rgba(248,113,113,.14);
+  --blue:#60a5fa;  --blue-wash:rgba(96,165,250,.14);
+  --gray:#a1a1aa;  --gray-wash:rgba(161,161,170,.13);
 
-  --field-ink:rgba(255,255,255,.045);
-  --mark-ink:rgba(255,255,255,.16);
-  --sheet:#141416;
-  --shadow:0 30px 80px rgba(0,0,0,.5);
-  --focus:var(--ink-2);
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 40px rgba(0,0,0,.45);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+  --ring:0 0 0 3px rgba(129,140,248,.35);
 
-  /* spacing scale, in rem so it breathes with the type */
-  --s1:.27rem; --s2:.53rem; --s3:.8rem; --s4:1.2rem; --s5:1.73rem; --s6:2.67rem; --s7:4.27rem;
-  --r:8px;
-  --gutter:clamp(18px,4vw,60px);
-  --display:"Helvetica Neue",Helvetica,Arial,sans-serif;
-  --body:-apple-system,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
-  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,monospace;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;
 
-  /* type scale: .8rem is the floor for anything read as a word */
-  --t-micro:.8rem;
-  --t-label:.8rem;
-  --t-num:.9rem;
-  --t-body:1rem;
-  --t-read:.95rem;          /* the Activity column and other one-line prose */
-  --t-name:1.04rem;
-  --track:.11em;
+  /* type scale */
+  --t-xs:.8rem;   /* 12 — badges, kbd */
+  --t-sm:.9rem;   /* 13.5 — labels, meta */
+  --t-md:.95rem;  /* 14.25 — table cells */
+  --t-base:1rem;  /* 15 — body */
+  --t-lg:1.13rem; /* 17 — card titles */
+  --t-xl:1.4rem;  /* 21 — stat values */
+  --t-2xl:1.75rem;/* 26 — page heading */
 
+  --r-sm:6px; --r:10px; --r-lg:14px;
+  --sidebar:15.5rem;
+  --pad:1.4rem;
   color-scheme:dark;
 }
 
 :root[data-theme="light"]{
-  --amber:#8a5606;          /* 5.9:1 */
-  --bad:#b23325;            /* 5.9:1 */
-
-  --bg:#fbfaf9;
-  --tint:rgba(0,0,0,.022); --tint-2:rgba(0,0,0,.045);
-  --line:rgba(0,0,0,.10); --line-2:rgba(0,0,0,.18);
-
-  --ink:#15151a;            /* 17.5:1 */
-  --ink-2:#45454f;          /*  9.1:1 */
-  --ink-3:#5c5c67;          /*  6.3:1 */
-  --ink-4:#70707a;          /*  4.7:1 */
-  --ink-mute:#93939c;       /*  2.9:1 — NOT for text */
-
-  --field-ink:rgba(0,0,0,.038);
-  --mark-ink:rgba(0,0,0,.13);
-  --sheet:#fff;
-  --shadow:0 24px 60px rgba(60,55,45,.18);
-
+  --bg:#f4f4f5; --surface:#ffffff; --surface-2:#f4f4f5; --surface-3:#e9e9ec;
+  --border:#e4e4e7; --border-2:#d4d4d8;
+  --text:#09090b; --text-2:#3f3f46; --text-3:#52525b; --text-4:#a1a1aa;
+  --accent:#4f46e5; --accent-strong:#4f46e5; --accent-wash:rgba(79,70,229,.10);
+  --green:#15803d; --green-wash:rgba(22,163,74,.12);
+  --amber:#b45309; --amber-wash:rgba(217,119,6,.14);
+  --red:#b91c1c;   --red-wash:rgba(220,38,38,.10);
+  --blue:#1d4ed8;  --blue-wash:rgba(37,99,235,.10);
+  --gray:#52525b;  --gray-wash:rgba(82,82,91,.10);
+  --shadow:0 1px 2px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.10);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.06);
+  --ring:0 0 0 3px rgba(79,70,229,.25);
   color-scheme:light;
 }
-
 @media (prefers-color-scheme:light){
   :root:not([data-theme="dark"]){
-    --amber:#8a5606; --bad:#b23325;
-    --bg:#fbfaf9;
-    --tint:rgba(0,0,0,.022); --tint-2:rgba(0,0,0,.045);
-    --line:rgba(0,0,0,.10); --line-2:rgba(0,0,0,.18);
-    --ink:#15151a; --ink-2:#45454f; --ink-3:#5c5c67; --ink-4:#70707a; --ink-mute:#93939c;
-    --field-ink:rgba(0,0,0,.038); --mark-ink:rgba(0,0,0,.13);
-    --sheet:#fff; --shadow:0 24px 60px rgba(60,55,45,.18);
+    --bg:#f4f4f5; --surface:#ffffff; --surface-2:#f4f4f5; --surface-3:#e9e9ec;
+    --border:#e4e4e7; --border-2:#d4d4d8;
+    --text:#09090b; --text-2:#3f3f46; --text-3:#52525b; --text-4:#a1a1aa;
+    --accent:#4f46e5; --accent-strong:#4f46e5; --accent-wash:rgba(79,70,229,.10);
+    --green:#15803d; --green-wash:rgba(22,163,74,.12);
+    --amber:#b45309; --amber-wash:rgba(217,119,6,.14);
+    --red:#b91c1c;   --red-wash:rgba(220,38,38,.10);
+    --blue:#1d4ed8;  --blue-wash:rgba(37,99,235,.10);
+    --gray:#52525b;  --gray-wash:rgba(82,82,91,.10);
+    --shadow:0 1px 2px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.10);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.06);
+    --ring:0 0 0 3px rgba(79,70,229,.25);
     color-scheme:light;
   }
 }
-
-/* The field is texture, not information. Anyone who finds it noisy behind text
-   can turn it off, and the choice is applied before first paint. */
-:root[data-field="off"]{ --field-ink:transparent; }

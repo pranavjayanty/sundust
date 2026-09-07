@@ -25,87 +25,49 @@ node bin/sundust.js logs        # the last 80 lines
 
 ## The console
 
-One screen, no hero block. It opens with the answer in a sentence — *"Nothing
-needs you · 1 running"*, or *"2 projects need you"* — then the state counts as
-what they always were: filters you can click. Plan usage sits beside them as a
-sparkline over the window's recent history, not a single bare percentage.
+A sidebar, a heading that says the answer, and cards.
 
-The roster is a **table, not cards**. Cards stop working somewhere around eight
-projects; a dense sortable table still works at forty. Rows group by state, sort
-by any column, filter by name or path (`/`), and the whole row is one click into
-whatever wants you — the row says which destination that is before you click.
+The sidebar is the set of views — all projects, needs you, running, scheduled,
+idle — each with its count, plus your pinned projects and the fleet-wide
+autonomy switch. The heading says it in a sentence: *Nothing needs you ·
+1 running*, or *2 projects need you*. Under it, five cards: the three counts
+as filters, and the two plan windows drawn as sparklines from their sample
+history.
 
-The widest column is **Activity**: the question an agent is waiting on, the live
-session's subject, the next scheduled task, or the last run's summary, in that
-order of urgency. Nothing in the row is dead space.
+The roster is a **table in a card**. Cards stop working somewhere around eight
+projects; a dense sortable table still works at forty. Every project has a
+tile on its own colour, a status badge, an **Activity** column that carries the
+most urgent true thing about it — the question an agent is waiting on, the
+live session's subject, the next scheduled task, or the last run's summary —
+and a session count that opens into every transcript with a Resume button.
+Rows group by status, sort by any column, and filter by name or path (`/`).
 
-Amber belongs to the wordmark and nothing else. Emphasis elsewhere is carried by
-ink weight — a live count is bright, a zero is dim — and only failure gets a
-second hue. Helvetica titles and labels, SF Pro for prose and data, monospace for
-numerics so columns line up when you scan. **Every ink step used for type clears
-4.5:1 in both themes**; there is a separate token for rules and tracks, and type
-is never set in it.
+Click a project and the **panel** opens on the right, in tabs:
 
-Every project's session count is a disclosure. Open it and the roster lists
-every transcript in that project — live first, then whatever is waiting on you,
-then by recency — each with one click back into where it left off.
-
-Click a project and the **drawer** opens: everything you can read about it and
-everything you can do to it, without leaving the console.
-
-- **Needs you** — the question an agent stopped on, with the context it had,
-  and a box to answer it. Send, and the run continues headless in the same
-  session; the result lands under Runs.
+- **Overview** — the question an agent stopped on, with the context it had and
+  a box to answer it; the run continues headless in the same session.
 - **Sessions** — every transcript, each with *Open* (in the app) and
-  *Continue…* (send it a message; it carries on headless).
-- **Agenda** — each task with a switch, its schedule in words, its priority
-  and its next fire; *Run* it now, remove it, or add one with a cron and a
-  prompt.
-- **Runs** — every recent run with its full result or error, cost, turns, and
-  whether its edits are waiting in Review.
-- **Notes** — the `NOTE:` lines the project has accumulated, which every later
-  run reads first.
-- **Settings** — autonomy, pin, archive, and stop tracking.
+  *Continue* (send it a message; it carries on headless).
+- **Agenda** — each task with a switch, its schedule in words, priority and
+  next fire; run it now, remove it, or add one with a cron and a prompt.
+- **Runs** — every recent run with its full result or error, cost and turns.
+- **Notes** — the `NOTE:` lines the project has accumulated, and the events it
+  has raised or listens for.
+- **Settings** — autonomy, what it listens for, pin, archive, stop tracking.
 
-*Jump*, in the row, skips the drawer and opens the session in the app.
+*Jump*, in the row, skips the panel and opens the session in the app.
 
-Type is fluid: one root size that grows with the window from 15px to 20px,
-and every size on the page is a multiple of it. The cheat sheet has a
-compact / comfortable / spacious switch on top of that. The footer's autonomy
-switch pauses every scheduled run in every project, and resumes them.
-
-Nothing is left to be guessed at: column headers, section labels and controls
-carry hover text, and `?` opens a sheet that says what every word on the page
-means, built from the same state and harness definitions the app runs on.
+Inter on a fluid root that grows with the window from 15px to 19px; every size
+on the page is a multiple of it, and the cheat sheet (`?`) has a compact /
+comfortable / spacious switch on top. Bright text on layered dark surfaces —
+body 18:1, secondary 13:1, the softest label 8:1 — and a light theme that is
+its own palette, not an inversion. Status is colour: amber needs you, green
+running, blue scheduled, red failed.
 
 Keyboard: `⌘K`/`Ctrl K` for the palette, `n` for a new project, `/` to filter,
 `t` for the theme, `?` for the cheat sheet. In the roster, Tab moves between
-rows, `↑↓` moves between them, `→` reaches a row's actions and its session
-list, and `↵` opens it.
-
-Light and dark are both real themes from one token set. Toggle in the header,
-with `t`, or from the palette; the choice is applied before first paint so there
-is no flash.
-
-## The field
-
-The page sits on a live line field rather than inside boxes. Thirty-eight fine
-streamlines drift across the viewport and **bend toward the pointer** — an
-inverse-square falloff, so it curves like a lens instead of kinking, and eases so
-the motion feels weighted. First contact snaps the well under the cursor rather
-than dragging it in from off-screen.
-
-Smaller marks answer the same gravity: a dot lattice on the counters that slides
-and swells toward the pointer, concentric rings that lean, a hatch that shears.
-All procedural, in the [Book of Shapes](https://bookofshapes.com) idiom — many
-fine elements, one colour, no fill — and all under about 17% opacity so they stay
-texture rather than decoration. One shared pointer listener drives every mark and
-marks outside the viewport are skipped. The loops stop when there is nothing to
-animate: once the pointer leaves and the easing settles, no frame is scheduled
-until something moves again, and nothing runs behind a hidden tab. Under
-`prefers-reduced-motion` — or on a page that loads hidden — the texture is still
-painted once; only the motion is withheld. If it competes with the text on your
-display, the cheat sheet (`?`) has a switch that turns it off for good.
+rows, `↑↓` moves between them, `→` reaches a row's session list and actions,
+`↵` opens the panel. In a reply box, `⌘↵` sends.
 
 ## States
 
@@ -223,7 +185,7 @@ only one fully wired. Others carry enough plumbing to launch and schedule.
 | OpenCode | `launch-only` | Headless runs and scheduling |
 
 `launch-only` means Sundust can start and schedule work but does not yet parse
-that harness's transcripts, so its sessions will not appear on the star field and
+that harness's transcripts, so its sessions will not appear in the roster and
 there is no deep link — the card falls back to revealing the folder. Adding one is
 a single entry in `src/harnesses.js`: a binary name, an argument builder, a result
 parser, and optionally a URL scheme.
@@ -316,13 +278,11 @@ src/claude-tasks.js reads Claude Code's own scheduler
 src/deeplink.js    harness-aware links
 src/server.js      HTTP API + SSE, request guard
 src/service.js     launchd login service: install, status, logs
-web/field.js       full-viewport line field with pointer gravity
-web/marks.js       small reactive marks (dots, rings, hatch)
 web/app.js         wiring: boot, update loop, global keys
 web/css/           tokens → base → components → views
 web/lib/           dom, format, api, store, derive
-web/ui/            theme, toast, links, dialogs, palette, help, drawer
-web/views/         warn, lede, roster, schedule, review, panels
+web/ui/            theme, toast, links, dialogs, palette, help, drawer (the panel)
+web/views/         sidebar, stats, roster, schedule, review, runs, warn
 ```
 
 The console is vanilla ES modules with no build step. State lives in one store;

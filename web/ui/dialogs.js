@@ -100,8 +100,8 @@ function buildHarnesses() {
 function harnessHint() {
   const h = store.data.harnesses.find((x) => x.id === $('#new-harness').value);
   $('#harness-hint').textContent = !h ? '' : h.support === 'full'
-    ? `${h.bin} · sessions indexed and one click away, headless runs supported`
-    : `${h.bin} · headless runs and scheduling work; session indexing and deep links are not wired up yet`;
+    ? `${h.bin} — sessions indexed and one click away; headless runs and resume supported`
+    : `${h.bin} — headless runs and scheduling work; session indexing and deep links are not wired up yet`;
 }
 
 async function createProject() {

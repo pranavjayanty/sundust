@@ -21,6 +21,17 @@ export function elx(tag, cls, text, attrs) {
   return n;
 }
 
+/** An inline icon from the sprite in index.html. */
+export function icon(name, cls = 'ic') {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', cls);
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `#i-${name}`);
+  svg.append(use);
+  return svg;
+}
+
 export const clear = (node) => { while (node.firstChild) node.removeChild(node.firstChild); return node; };
 
 /** True on Apple hardware, so we can print the right modifier key. */

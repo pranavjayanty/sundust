@@ -4,169 +4,235 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Sundust</title>
-<meta name="description" content="Local-first mission control for the projects you run with a coding agent.">
+<meta name="description" content="Mission control for the projects you run with a coding agent.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/base.css">
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/views.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230b0b0c'/><circle cx='16' cy='16' r='5.5' fill='%23ffb020'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236366f1'/><circle cx='16' cy='16' r='5' fill='white'/><circle cx='16' cy='16' r='9' fill='none' stroke='white' stroke-opacity='.5' stroke-width='1.5'/></svg>">
 <script>
-  /* applied before first paint so the theme never flashes */
+  /* applied before first paint so nothing flashes */
   try {
     const t = localStorage.getItem('sundust-theme'); if (t) document.documentElement.dataset.theme = t;
-    if (localStorage.getItem('sundust-field') === 'off') document.documentElement.dataset.field = 'off';
     const d = localStorage.getItem('sundust-density'); if (d && d !== 'comfortable') document.documentElement.dataset.density = d;
   } catch {}
 </script>
 </head>
 <body>
-<canvas id="field" aria-hidden="true"></canvas>
-<a class="skip" href="#tbl">Skip to projects</a>
 
-<header class="bar">
-  <div class="wrap bar-in">
-    <div class="word"><span class="dot" aria-hidden="true"></span>Sundust</div>
-    <div class="bar-actions">
-      <button class="btn icon" id="btn-help" type="button" aria-label="How this works"
-              title="What everything on this page means (?)">?</button>
-      <button class="btn icon" id="btn-theme" type="button" aria-label="Toggle theme"></button>
-      <button class="btn" id="btn-palette" type="button" title="Search projects, sessions and tasks">
-        Search <kbd id="kbd-mod">⌘K</kbd>
-      </button>
-      <button class="btn solid" id="btn-new" type="button" title="Scaffold a new project (n)">New project</button>
+<!-- icon sprite: a small Lucide-style set, stroked in currentColor -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+    <symbol id="i-enter" viewBox="0 0 24 24"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></symbol>
+    <symbol id="i-resume" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="i-notes" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="i-review" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M14.5 10 3 3l3.5 7L3 17l11.5-7Z"/><path d="M6.5 10h8"/><path d="M21 10 14.5 10"/></symbol>
+    <symbol id="i-logo" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="8.5" stroke-opacity=".45"/></symbol>
+  </defs>
+</svg>
+
+<a class="skip" href="#roster">Skip to projects</a>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Navigation">
+    <div class="brand">
+      <span class="brand-mark"><svg class="ic"><use href="#i-logo"/></svg></span>
+      <span class="brand-name">Sundust</span>
     </div>
+    <nav class="nav" id="nav" aria-label="Views"></nav>
+    <div class="nav-title">Pinned</div>
+    <nav class="nav" id="nav-pinned" aria-label="Pinned projects"></nav>
+    <div class="sidebar-foot" id="sidebar-foot"></div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="btn ghost icon only-mobile" id="btn-menu" type="button" aria-label="Menu" aria-controls="sidebar">
+        <svg class="ic"><use href="#i-grid"/></svg></button>
+      <div class="topbar-title" id="topbar-title">Overview</div>
+      <div class="topbar-actions">
+        <button class="btn secondary" id="btn-palette" type="button" title="Search projects, sessions and tasks">
+          <svg class="ic"><use href="#i-search"/></svg><span>Search</span><kbd id="kbd-mod">⌘K</kbd></button>
+        <button class="btn ghost icon" id="btn-help" type="button" aria-label="How this works" title="How this works (?)">
+          <svg class="ic"><use href="#i-help"/></svg></button>
+        <button class="btn ghost icon" id="btn-theme" type="button" aria-label="Toggle theme"></button>
+        <button class="btn primary" id="btn-new" type="button" title="Scaffold a new project (n)">
+          <svg class="ic"><use href="#i-plus"/></svg><span>New project</span></button>
+      </div>
+    </header>
+
+    <main class="content">
+      <div id="warn"></div>
+
+      <section class="page-head">
+        <h1 class="page-h" id="lede-h"></h1>
+        <p class="page-sub" id="lede-sub"></p>
+      </section>
+
+      <section class="stats" id="stats" aria-label="At a glance"></section>
+
+      <section class="card" id="review-sec" aria-labelledby="review-lbl" hidden>
+        <div class="card-head">
+          <h2 id="review-lbl"><svg class="ic"><use href="#i-review"/></svg>Review</h2>
+          <span class="card-sub">Edits made while you were away, waiting on a yes or a no</span>
+          <span class="count" id="review-count"></span>
+        </div>
+        <div class="card-body" id="review"></div>
+      </section>
+
+      <section class="card" id="roster" aria-labelledby="roster-lbl">
+        <div class="card-head">
+          <h2 id="roster-lbl"><svg class="ic"><use href="#i-folder"/></svg>Projects</h2>
+          <div class="chips" id="chips" role="group" aria-label="Filter projects by state"></div>
+          <label class="vh" for="filter">Filter projects by name or path</label>
+          <div class="search-field">
+            <svg class="ic"><use href="#i-search"/></svg>
+            <input id="filter" placeholder="Filter…" autocomplete="off">
+            <kbd>/</kbd>
+          </div>
+        </div>
+        <div class="table-wrap" id="tbl" tabindex="-1"></div>
+      </section>
+
+      <div class="two-col">
+        <section class="card" aria-labelledby="sched-lbl">
+          <div class="card-head">
+            <h2 id="sched-lbl"><svg class="ic"><use href="#i-calendar"/></svg>Schedule</h2>
+            <span class="card-sub">Next 7 days</span>
+            <span class="count" id="sched-count"></span>
+          </div>
+          <div class="card-body" id="sched"></div>
+        </section>
+
+        <section class="card" aria-labelledby="runs-lbl">
+          <div class="card-head">
+            <h2 id="runs-lbl"><svg class="ic"><use href="#i-terminal"/></svg>Recent runs</h2>
+            <span class="card-sub">Unattended work, newest first</span>
+          </div>
+          <div class="card-body" id="runs"></div>
+        </section>
+      </div>
+
+      <div class="two-col">
+        <section class="card" aria-labelledby="act-lbl">
+          <div class="card-head">
+            <h2 id="act-lbl"><svg class="ic"><use href="#i-activity"/></svg>Activity</h2>
+            <span class="card-sub">Sessions and runs, last 14 days</span>
+          </div>
+          <div class="card-body" id="activity"></div>
+        </section>
+        <section class="card" id="adoptable-card" aria-labelledby="adopt-lbl" hidden>
+          <div class="card-head">
+            <h2 id="adopt-lbl"><svg class="ic"><use href="#i-folder"/></svg>Untracked folders</h2>
+            <span class="card-sub">Folders with sessions that Sundust is not watching yet</span>
+          </div>
+          <div class="card-body" id="adoptable"></div>
+        </section>
+      </div>
+    </main>
   </div>
-</header>
-
-<main class="wrap">
-  <div id="warn"></div>
-
-  <!-- the answer first, then the counts as what they are: filters -->
-  <section class="lede" aria-labelledby="lede-h">
-    <h1 class="lede-h" id="lede-h"></h1>
-    <p class="lede-sub" id="lede-sub"></p>
-    <div class="chips" id="chips" role="group" aria-label="Filter projects by state"></div>
-    <div class="usage" id="usage" aria-label="Plan usage"
-      title="Your rolling plan windows. The scheduler reads these before firing anything and holds unattended runs while your own window is busy."></div>
-  </section>
-
-  <section class="review" id="review-sec" aria-labelledby="review-lbl" hidden>
-    <div class="sechead">
-      <canvas class="secmark" data-mark="rings" aria-hidden="true"></canvas>
-      <span class="lbl" id="review-lbl"
-        title="Files changed by unattended runs, waiting on a yes or a no. Revert restores each file to its state before the run and refuses any file you have edited since.">Review · edits made while you were away</span>
-      <span class="spacer"></span>
-      <span class="tag" id="review-count"></span>
-    </div>
-    <div id="review"></div>
-  </section>
-
-  <section class="roster" aria-labelledby="roster-lbl">
-    <div class="sechead">
-      <canvas class="secmark" data-mark="dots" aria-hidden="true"></canvas>
-      <span class="lbl" id="roster-lbl"
-        title="Every project Sundust tracks. Click a row to open it, click a session count to list its sessions.">Projects</span>
-      <label class="vh" for="filter">Filter projects by name or path</label>
-      <input class="filter" id="filter" placeholder="Filter by name or path…  (/)" autocomplete="off">
-      <span class="tag kbdhint">↑↓ move · → actions · ↵ open</span>
-      <span class="tag" id="roster-count"></span>
-    </div>
-    <div id="tbl" class="tbl" tabindex="-1"></div>
-  </section>
-
-  <section class="sched" aria-labelledby="sched-lbl">
-    <div class="sechead">
-      <canvas class="secmark" data-mark="hatch" aria-hidden="true"></canvas>
-      <span class="lbl" id="sched-lbl"
-        title="Agenda tasks that will fire on their own over the next week, one row per project. Hover a dot for the task and its time.">Schedule · next 7 days</span>
-      <span class="spacer"></span>
-      <span class="tag" id="sched-count"></span>
-    </div>
-    <div id="sched"></div>
-  </section>
-
-  <section class="panels" id="panels" aria-label="Summary"></section>
-  <section id="adoptable" style="padding-top:var(--s6)"></section>
-  <footer class="foot" id="foot"></footer>
-</main>
+</div>
 
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
-<dialog class="sheet" id="dlg-new" aria-labelledby="new-h">
-  <h2 id="new-h">New project</h2>
-  <p class="sub">Scaffolds the folder, writes a brief the agent works from, loads its agenda,
-    then opens your harness with a starter prompt.</p>
-
-  <label class="field"><span>Name</span>
-    <input id="new-name" placeholder="Cooking notebook" autocomplete="off"></label>
-
-  <fieldset class="fieldset">
-    <legend>Starts from</legend>
-    <div class="tpl" id="new-templates" role="radiogroup" aria-label="Project template"></div>
-  </fieldset>
-
-  <label class="field"><span>Harness</span><select id="new-harness"></select></label>
-  <p class="hint-line" id="harness-hint"></p>
-
-  <label class="field"><span>Autonomy</span>
-    <select id="new-autonomy">
-      <option value="read" selected>read — scheduled runs may look and report, never edit</option>
-      <option value="edit">edit — scheduled runs may change files in this project</option>
-      <option value="off">off — nothing runs unattended</option>
-    </select>
-  </label>
-
-  <p class="path-preview" id="new-path"></p>
-  <div class="row end">
-    <button class="btn" type="button" data-close>Cancel</button>
-    <button class="btn solid" type="button" id="new-create">Create &amp; open</button>
-  </div>
-</dialog>
-
-<dialog class="palette" id="dlg-palette" aria-label="Search and commands">
-  <input id="pal-input" placeholder="Jump to a session, run a task, start something new…"
-         autocomplete="off" role="combobox" aria-expanded="true" aria-controls="pal-list">
-  <div class="pal-list" id="pal-list" role="listbox" aria-label="Results"></div>
-  <div class="pal-foot">
-    <span>↑↓ move</span><span>↵ open</span><span>esc close</span>
-    <span class="spacer"></span><span id="pal-hint-mod">⌘K</span>
-  </div>
-</dialog>
-
-<dialog class="drawer" id="dlg-project" aria-labelledby="dr-h">
-  <header class="dr-head">
-    <div class="dr-title">
-      <i class="st" id="dr-dot" aria-hidden="true"></i>
-      <h2 id="dr-h"></h2>
-      <button class="btn quiet sm" id="dr-close" type="button" aria-label="Close">✕</button>
+<!-- ------------------------------------------------------------ project panel -->
+<dialog class="panel" id="dlg-project" aria-labelledby="dr-h">
+  <header class="panel-head">
+    <div class="panel-title">
+      <span class="ptile" id="dr-tile" aria-hidden="true"></span>
+      <div class="panel-name">
+        <h2 id="dr-h"></h2>
+        <div class="panel-meta" id="dr-meta"></div>
+      </div>
+      <button class="btn ghost icon" id="dr-close" type="button" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
-    <div class="dr-meta" id="dr-meta"></div>
-    <div class="dr-tools" id="dr-tools"></div>
+    <div class="panel-actions" id="dr-tools"></div>
+    <div class="tabs" id="dr-tabs" role="tablist"></div>
   </header>
-  <div class="dr-body" id="dr-body"></div>
+  <div class="panel-body" id="dr-body"></div>
 </dialog>
 
-<dialog class="sheet wide" id="dlg-help" aria-labelledby="help-h">
-  <div class="sheet-top">
-    <h2 id="help-h">How this works</h2>
-    <button class="btn quiet sm" id="help-close" type="button" data-close aria-label="Close">✕</button>
+<!-- ------------------------------------------------------------ new project -->
+<dialog class="modal" id="dlg-new" aria-labelledby="new-h">
+  <div class="modal-head"><h2 id="new-h">New project</h2>
+    <button class="btn ghost icon" type="button" data-close aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <p class="modal-sub">Scaffolds the folder, writes a brief the agent works from, loads its agenda, then opens your harness with a starter prompt.</p>
+  <label class="field"><span>Name</span><input id="new-name" placeholder="Cooking notebook" autocomplete="off"></label>
+  <fieldset class="fieldset"><legend>Starts from</legend>
+    <div class="tpl" id="new-templates" role="radiogroup" aria-label="Project template"></div></fieldset>
+  <div class="field-row">
+    <label class="field"><span>Harness</span><select id="new-harness"></select></label>
+    <label class="field"><span>Autonomy</span>
+      <select id="new-autonomy">
+        <option value="read" selected>Read — may look and report, never edit</option>
+        <option value="edit">Edit — may change files, every change goes to Review</option>
+        <option value="off">Off — nothing runs unattended</option>
+      </select></label>
   </div>
-  <p class="sub">Sundust answers one question: what needs you. Everything below is what the
-    words on this page mean. Press <kbd id="help-mod">⌘K</kbd> to search, or <kbd>?</kbd> to
-    come back here.</p>
+  <p class="hint" id="harness-hint"></p>
+  <p class="hint mono" id="new-path"></p>
+  <div class="modal-foot"><button class="btn secondary" type="button" data-close>Cancel</button>
+    <button class="btn primary" type="button" id="new-create">Create &amp; open</button></div>
+</dialog>
+
+<!-- ------------------------------------------------------------ palette -->
+<dialog class="palette" id="dlg-palette" aria-label="Search and commands">
+  <div class="pal-input"><svg class="ic"><use href="#i-search"/></svg>
+    <input id="pal-input" placeholder="Search projects, sessions, tasks…" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="pal-list"></div>
+  <div class="pal-list" id="pal-list" role="listbox" aria-label="Results"></div>
+  <div class="pal-foot"><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span>
+    <span class="spacer"></span><span id="pal-hint-mod">⌘K</span></div>
+</dialog>
+
+<!-- ------------------------------------------------------------ help -->
+<dialog class="modal wide" id="dlg-help" aria-labelledby="help-h">
+  <div class="modal-head"><h2 id="help-h">How this works</h2>
+    <button class="btn ghost icon" id="help-close" type="button" data-close aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <p class="modal-sub">Sundust answers one question: what needs you. Everything below is what the words on this page mean.
+    Press <kbd id="help-mod">⌘K</kbd> to search, or <kbd>?</kbd> to come back here.</p>
   <div id="help-body"></div>
 </dialog>
 
-<dialog class="sheet" id="dlg-run" aria-labelledby="run-h">
-  <h2 id="run-h">Run now</h2>
-  <p class="sub" id="run-sub"></p>
+<!-- ------------------------------------------------------------ run now -->
+<dialog class="modal" id="dlg-run" aria-labelledby="run-h">
+  <div class="modal-head"><h2 id="run-h">Run now</h2>
+    <button class="btn ghost icon" type="button" data-close aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <p class="modal-sub" id="run-sub"></p>
   <label class="field"><span>What should it do?</span>
-    <textarea id="run-prompt" rows="5"
-      placeholder="Check for anything new and summarise what changed."></textarea></label>
-  <div class="row end">
-    <button class="btn" type="button" data-close>Cancel</button>
-    <button class="btn solid" type="button" id="run-go">Run headless</button>
-  </div>
+    <textarea id="run-prompt" rows="5" placeholder="Check for anything new and summarise what changed."></textarea></label>
+  <div class="modal-foot"><button class="btn secondary" type="button" data-close>Cancel</button>
+    <button class="btn primary" type="button" id="run-go">Run headless</button></div>
 </dialog>
 
 <script type="module" src="/app.js"></script>

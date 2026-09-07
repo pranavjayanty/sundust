@@ -32,7 +32,7 @@ const AUTONOMY = [
 ];
 
 const CONCEPTS = [
-  ['The drawer', 'Click any project and it opens on the right: the question an agent is waiting '
+  ['The panel', 'Click any project and it opens on the right, in tabs: the question an agent is waiting '
     + 'on with a box to answer it, every session with a way to continue it, the agenda with '
     + 'switches, every run’s full result, the project’s notes, and its settings. Jump, in the '
     + 'row, goes straight to the app instead.'],
@@ -76,7 +76,7 @@ function build() {
   const s = store.data;
 
   if (s) { const sec = block('Setup', []); sec.append(setupChecklist(s)); host.append(sec); }
-  host.append(block('Display', [densityRow(), fieldToggle()]));
+  host.append(block('Display', [densityRow()]));
   host.append(block('Keyboard', KEYS.map(([k, v]) => defrow(k, v, true))));
 
   // straight from states.js, so the sheet cannot describe a state that moved
@@ -106,7 +106,7 @@ function densityRow() {
   const row = el('div', 'row');
   const now = document.documentElement.dataset.density || 'comfortable';
   for (const [k, label] of [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['spacious', 'Spacious']]) {
-    const b = elx('button', 'btn sm', label, { type: 'button', 'aria-pressed': String(now === k) });
+    const b = elx('button', 'btn secondary sm', label, { type: 'button', 'aria-pressed': String(now === k) });
     b.onclick = () => {
       if (k === 'comfortable') delete document.documentElement.dataset.density;
       else document.documentElement.dataset.density = k;
@@ -116,34 +116,6 @@ function densityRow() {
     row.append(b);
   }
   v.append(row);
-  r.append(v);
-  return r;
-}
-
-/** The background field is texture. If it fights the text for you, turn it off. */
-function fieldToggle() {
-  const r = el('div', 'help-row');
-  r.append(el('span', 'help-k', 'Background'));
-
-  const v = el('div', 'help-v');
-  const off = document.documentElement.dataset.field === 'off';
-  const b = elx('button', 'btn sm', off ? 'Turn the field on' : 'Turn the field off',
-    { type: 'button', 'aria-pressed': String(off) });
-  b.onclick = () => {
-    const nowOff = document.documentElement.dataset.field === 'off';
-    if (nowOff) delete document.documentElement.dataset.field;
-    else document.documentElement.dataset.field = 'off';
-    try { localStorage.setItem('sundust-field', nowOff ? 'on' : 'off'); } catch {}
-    build();
-  };
-  v.append(el('div', null,
-    'The page sits on a live line field that bends toward the pointer. It is drawn at under 5% '
-    + 'opacity, but if it competes with the text on your display, switch it off — the choice is '
-    + 'remembered and applied before the page paints.'));
-  const wrap = el('div');
-  wrap.style.marginTop = 'var(--s2)';
-  wrap.append(b);
-  v.append(wrap);
   r.append(v);
   return r;
 }

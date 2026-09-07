@@ -4,7 +4,7 @@
    two commands that you then had to retype by hand. The remedy is now a
    button that puts the command on the clipboard. */
 
-import { $, el, elx, clear } from '../lib/dom.js';
+import { $, el, elx, clear, icon } from '../lib/dom.js';
 import { toast } from '../ui/toast.js';
 
 export function renderWarn(s) {
@@ -12,7 +12,7 @@ export function renderWarn(s) {
   if (!s.authWarning) return;
 
   const w = elx('div', 'warn', null, { role: 'alert' });
-  w.append(el('span', 'ico', '!'));
+  w.append(icon('alert'));
 
   const msg = el('div', 'msg');
   // the message names its own remedy in backticks; lift those out as actions
