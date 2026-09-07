@@ -35,9 +35,18 @@ numerics so columns line up when you scan. **Every ink step used for type clears
 4.5:1 in both themes**; there is a separate token for rules and tracks, and type
 is never set in it.
 
+Every project's session count is a disclosure. Open it and the roster lists
+every transcript in that project — live first, then whatever is waiting on you,
+then by recency — each with one click back into where it left off.
+
+Nothing is left to be guessed at: column headers, section labels and controls
+carry hover text, and `?` opens a sheet that says what every word on the page
+means, built from the same state and harness definitions the app runs on.
+
 Keyboard: `⌘K`/`Ctrl K` for the palette, `n` for a new project, `/` to filter,
-`t` for the theme. In the roster, Tab moves between rows, `↑↓` moves between
-them, `→` reaches a row's actions, and `↵` opens it.
+`t` for the theme, `?` for the cheat sheet. In the roster, Tab moves between
+rows, `↑↓` moves between them, `→` reaches a row's actions and its session
+list, and `↵` opens it.
 
 Light and dark are both real themes from one token set. Toggle in the header,
 with `t`, or from the palette; the choice is applied before first paint so there
@@ -60,7 +69,8 @@ marks outside the viewport are skipped. The loops stop when there is nothing to
 animate: once the pointer leaves and the easing settles, no frame is scheduled
 until something moves again, and nothing runs behind a hidden tab. Under
 `prefers-reduced-motion` — or on a page that loads hidden — the texture is still
-painted once; only the motion is withheld.
+painted once; only the motion is withheld. If it competes with the text on your
+display, the cheat sheet (`?`) has a switch that turns it off for good.
 
 ## States
 
@@ -271,7 +281,7 @@ web/marks.js       small reactive marks (dots, rings, hatch)
 web/app.js         wiring: boot, update loop, global keys
 web/css/           tokens → base → components → views
 web/lib/           dom, format, api, store, derive
-web/ui/            theme, toast, links, dialogs, palette
+web/ui/            theme, toast, links, dialogs, palette, help
 web/views/         warn, lede, roster, schedule, review, panels
 ```
 

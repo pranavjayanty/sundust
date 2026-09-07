@@ -12,7 +12,10 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230b0b0c'/><circle cx='16' cy='16' r='5.5' fill='%23ffb020'/></svg>">
 <script>
   /* applied before first paint so the theme never flashes */
-  try { const t = localStorage.getItem('sundust-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  try {
+    const t = localStorage.getItem('sundust-theme'); if (t) document.documentElement.dataset.theme = t;
+    if (localStorage.getItem('sundust-field') === 'off') document.documentElement.dataset.field = 'off';
+  } catch {}
 </script>
 </head>
 <body>
@@ -23,6 +26,8 @@
   <div class="wrap bar-in">
     <div class="word"><span class="dot" aria-hidden="true"></span>Sundust</div>
     <div class="bar-actions">
+      <button class="btn icon" id="btn-help" type="button" aria-label="How this works"
+              title="What everything on this page means (?)">?</button>
       <button class="btn icon" id="btn-theme" type="button" aria-label="Toggle theme"></button>
       <button class="btn" id="btn-palette" type="button" title="Search projects, sessions and tasks">
         Search <kbd id="kbd-mod">⌘K</kbd>
@@ -40,13 +45,15 @@
     <h1 class="lede-h" id="lede-h"></h1>
     <p class="lede-sub" id="lede-sub"></p>
     <div class="chips" id="chips" role="group" aria-label="Filter projects by state"></div>
-    <div class="usage" id="usage" aria-label="Plan usage"></div>
+    <div class="usage" id="usage" aria-label="Plan usage"
+      title="Your rolling plan windows. The scheduler reads these before firing anything and holds unattended runs while your own window is busy."></div>
   </section>
 
   <section class="review" id="review-sec" aria-labelledby="review-lbl" hidden>
     <div class="sechead">
       <canvas class="secmark" data-mark="rings" aria-hidden="true"></canvas>
-      <span class="lbl" id="review-lbl">Review · edits made while you were away</span>
+      <span class="lbl" id="review-lbl"
+        title="Files changed by unattended runs, waiting on a yes or a no. Revert restores each file to its state before the run and refuses any file you have edited since.">Review · edits made while you were away</span>
       <span class="spacer"></span>
       <span class="tag" id="review-count"></span>
     </div>
@@ -56,7 +63,8 @@
   <section class="roster" aria-labelledby="roster-lbl">
     <div class="sechead">
       <canvas class="secmark" data-mark="dots" aria-hidden="true"></canvas>
-      <span class="lbl" id="roster-lbl">Projects</span>
+      <span class="lbl" id="roster-lbl"
+        title="Every project Sundust tracks. Click a row to open it, click a session count to list its sessions.">Projects</span>
       <label class="vh" for="filter">Filter projects by name or path</label>
       <input class="filter" id="filter" placeholder="Filter by name or path…  (/)" autocomplete="off">
       <span class="tag kbdhint">↑↓ move · → actions · ↵ open</span>
@@ -68,7 +76,8 @@
   <section class="sched" aria-labelledby="sched-lbl">
     <div class="sechead">
       <canvas class="secmark" data-mark="hatch" aria-hidden="true"></canvas>
-      <span class="lbl" id="sched-lbl">Schedule · next 7 days</span>
+      <span class="lbl" id="sched-lbl"
+        title="Agenda tasks that will fire on their own over the next week, one row per project. Hover a dot for the task and its time.">Schedule · next 7 days</span>
       <span class="spacer"></span>
       <span class="tag" id="sched-count"></span>
     </div>
@@ -121,6 +130,17 @@
     <span>↑↓ move</span><span>↵ open</span><span>esc close</span>
     <span class="spacer"></span><span id="pal-hint-mod">⌘K</span>
   </div>
+</dialog>
+
+<dialog class="sheet wide" id="dlg-help" aria-labelledby="help-h">
+  <div class="sheet-top">
+    <h2 id="help-h">How this works</h2>
+    <button class="btn quiet sm" id="help-close" type="button" data-close aria-label="Close">✕</button>
+  </div>
+  <p class="sub">Sundust answers one question: what needs you. Everything below is what the
+    words on this page mean. Press <kbd id="help-mod">⌘K</kbd> to search, or <kbd>?</kbd> to
+    come back here.</p>
+  <div id="help-body"></div>
 </dialog>
 
 <dialog class="sheet" id="dlg-run" aria-labelledby="run-h">

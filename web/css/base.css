@@ -4,7 +4,7 @@
 *{box-sizing:border-box;min-width:0}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:var(--t-body);
-  line-height:1.55;min-height:100vh;-webkit-font-smoothing:antialiased;letter-spacing:-.004em}
+  line-height:1.6;min-height:100vh;-webkit-font-smoothing:antialiased;letter-spacing:-.004em}
 h1,h2,h3,.display,.lbl,.thead span,.thead button,.grouphdr .n,.panel h3,.word,.chip .n{
   font-family:var(--display)}
 ::selection{background:var(--ink);color:var(--bg)}
@@ -14,7 +14,7 @@ h1,h2,h3,.display,.lbl,.thead span,.thead button,.grouphdr .n,.panel h3,.word,.c
   outline:2px solid var(--focus);outline-offset:2px;border-radius:3px}
 
 #field{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none;display:block}
-.wrap{max-width:1240px;margin:0 auto;padding-inline:var(--gutter);position:relative;z-index:1}
+.wrap{max-width:1400px;margin:0 auto;padding-inline:var(--gutter);position:relative;z-index:1}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .lbl{font-size:var(--t-label);letter-spacing:var(--track);text-transform:uppercase;
   color:var(--ink-3);font-weight:500}

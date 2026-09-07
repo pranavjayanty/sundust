@@ -5,7 +5,7 @@
    The bend is a smooth falloff toward the cursor rather than a hard displacement,
    so lines curve instead of kinking. */
 
-const LINES = 38;
+const LINES = 24;   // fewer, wider-spaced lines: text has to sit on this
 const STEP = 16;          // px between samples along a line
 const RADIUS = 380;       // influence radius of the pointer
 const PULL = 40;          // px of maximum displacement
@@ -23,14 +23,16 @@ export function startField(canvas) {
 
   /* The stroke colour used to be read from computed style on every frame, for
      every frame of the page's life. It only changes when the theme does. */
-  let inkCache = 'rgba(255,255,255,.07)';
+  let inkCache = 'rgba(255,255,255,.045)';
+  let off = false;
   const readInk = () => {
+    off = document.documentElement.dataset.field === 'off';
     inkCache = getComputedStyle(document.documentElement)
       .getPropertyValue('--field-ink').trim() || inkCache;
   };
   readInk();
   new MutationObserver(() => { readInk(); wake(); })
-    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-field'] });
   matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { readInk(); wake(); });
 
   function build() {
@@ -60,6 +62,7 @@ export function startField(canvas) {
     present += (targetPresent - present) * EASE;
 
     ctx.clearRect(0, 0, w, h);
+    if (off) { running = false; return; }
     ctx.strokeStyle = inkCache;
     ctx.lineWidth = 1;
     ctx.lineJoin = 'round';
@@ -130,6 +133,8 @@ export function startField(canvas) {
   function drawStill() {
     present = 0; targetPresent = 0;
     ctx.clearRect(0, 0, w, h);
+    if (off) return;
+    if (off) { running = false; return; }
     ctx.strokeStyle = inkCache; ctx.lineWidth = 1;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (const row of rows) {

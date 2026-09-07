@@ -15,6 +15,7 @@ import { initTheme, toggleTheme } from './ui/theme.js';
 import { fail } from './ui/toast.js';
 import { initDialogs, openNew } from './ui/dialogs.js';
 import { initPalette, openPalette } from './ui/palette.js';
+import { initHelp, openHelp } from './ui/help.js';
 
 import { renderWarn } from './views/warn.js';
 import { renderLede } from './views/lede.js';
@@ -111,11 +112,13 @@ addEventListener('keydown', (e) => {
   if (e.key === 'n') { e.preventDefault(); openNew(); }
   if (e.key === '/') { e.preventDefault(); $('#filter').focus(); }
   if (e.key === 't') { e.preventDefault(); toggleTheme(); }
+  if (e.key === '?') { e.preventDefault(); openHelp(); }
 });
 
 initTheme();
 initDialogs(refresh);
 initPalette(refresh);
+initHelp();
 startField($('#field'));
 bindMarks();
 schedule();

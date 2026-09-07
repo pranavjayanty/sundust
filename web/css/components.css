@@ -54,6 +54,9 @@ dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
 :root[data-theme="light"] dialog::backdrop{background:rgba(40,38,34,.35)}
 .sheet{border:1px solid var(--line);border-radius:12px;background:var(--sheet);
   padding:var(--s5);width:min(560px,94vw);max-height:88vh;overflow-y:auto;box-shadow:var(--shadow)}
+.sheet.wide{width:min(720px,94vw)}
+.sheet-top{display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s1)}
+.sheet-top h2{flex:1}
 .sheet h2{margin:0 0 var(--s1);font-size:19px;font-weight:400;letter-spacing:-.022em;
   font-family:var(--body)}
 .sheet .sub{margin:0 0 var(--s5);color:var(--ink-3);font-size:var(--t-num);line-height:1.6}
@@ -86,6 +89,18 @@ dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
 .row{display:flex;gap:var(--s2)}
 .row.end{justify-content:flex-end;align-items:center}
 
+/* ---------------------------------------------------------------- cheat sheet */
+.help-sec{margin-top:var(--s5);padding-top:var(--s4);border-top:1px solid var(--line)}
+.help-sec h3{margin:0 0 var(--s3);font-family:var(--display);font-size:var(--t-label);
+  letter-spacing:var(--track);text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.help-rows{display:flex;flex-direction:column;gap:var(--s3)}
+.help-row{display:grid;grid-template-columns:minmax(96px,150px) 1fr;gap:var(--s4);
+  align-items:baseline}
+.help-k{font-weight:600;font-size:var(--t-num);color:var(--ink)}
+.help-k.mono{font-family:var(--mono);font-weight:400;font-size:var(--t-num)}
+.help-v{font-size:var(--t-num);color:var(--ink-2);line-height:1.6}
+@media (max-width:560px){ .help-row{grid-template-columns:1fr;gap:2px} }
+
 /* ----------------------------------------------------------------- palette */
 .palette{border:1px solid var(--line);border-radius:12px;background:var(--sheet);
   width:min(620px,94vw);box-shadow:var(--shadow);overflow:hidden;padding:0;margin-top:9vh}
@@ -102,7 +117,7 @@ dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
 .pal-item .ptxt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-size:13px;color:var(--ink-2)}
 .pal-item[aria-selected=true] .ptxt,.pal-item.hot .ptxt{color:var(--ink)}
-.pal-item .kind{font-family:var(--display);font-size:10px;letter-spacing:.14em;
+.pal-item .kind{font-family:var(--display);font-size:var(--t-micro);letter-spacing:.1em;
   text-transform:uppercase;color:var(--ink-4);font-weight:500}
 .pal-item .ic{width:13px;text-align:center;color:var(--ink-4);font-size:var(--t-micro);flex:none}
 .pal-item.hot .ic{color:var(--bad)}

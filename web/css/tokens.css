@@ -22,7 +22,7 @@
   --ink-4:#7c7c86;          /*  4.8:1 — softest type on the page */
   --ink-mute:#5d5d66;       /*  3.0:1 — NOT for text */
 
-  --field-ink:rgba(255,255,255,.07);
+  --field-ink:rgba(255,255,255,.045);
   --mark-ink:rgba(255,255,255,.16);
   --sheet:#141416;
   --shadow:0 30px 80px rgba(0,0,0,.5);
@@ -35,13 +35,15 @@
   --body:-apple-system,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
   --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,monospace;
 
-  /* type floor: nothing smaller than 11px, tracking eased from .19em to .12em
-     so caps labels keep their word shapes */
-  --t-micro:11px;
-  --t-label:11px;
-  --t-body:13.5px;
-  --t-num:12.5px;
-  --track:.12em;
+  /* Type scale. The first pass raised contrast but left the sizes alone, and on
+     a large display the result still read small: 13.5px prose, 12.5px data,
+     11px labels. Everything moves up a step, and the floor is 12px. */
+  --t-micro:12px;
+  --t-label:12px;
+  --t-body:15px;
+  --t-num:13.5px;
+  --t-name:15.5px;
+  --track:.11em;
 
   color-scheme:dark;
 }
@@ -60,7 +62,7 @@
   --ink-4:#70707a;          /*  4.7:1 */
   --ink-mute:#93939c;       /*  2.9:1 — NOT for text */
 
-  --field-ink:rgba(0,0,0,.055);
+  --field-ink:rgba(0,0,0,.038);
   --mark-ink:rgba(0,0,0,.13);
   --sheet:#fff;
   --shadow:0 24px 60px rgba(60,55,45,.18);
@@ -75,8 +77,12 @@
     --tint:rgba(0,0,0,.022); --tint-2:rgba(0,0,0,.045);
     --line:rgba(0,0,0,.10); --line-2:rgba(0,0,0,.18);
     --ink:#15151a; --ink-2:#45454f; --ink-3:#5c5c67; --ink-4:#70707a; --ink-mute:#93939c;
-    --field-ink:rgba(0,0,0,.055); --mark-ink:rgba(0,0,0,.13);
+    --field-ink:rgba(0,0,0,.038); --mark-ink:rgba(0,0,0,.13);
     --sheet:#fff; --shadow:0 24px 60px rgba(60,55,45,.18);
     color-scheme:light;
   }
 }
+
+/* The field is texture, not information. Anyone who finds it noisy behind text
+   can turn it off, and the choice is applied before first paint. */
+:root[data-field="off"]{ --field-ink:transparent; }

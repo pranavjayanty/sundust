@@ -12,19 +12,28 @@
       buttons with aria-sort, and a focus ring on the row you tabbed to. */
 
 import { $, el, elx, clear } from '../lib/dom.js';
-import { ago, until, short } from '../lib/format.js';
+import { ago, until, short, plural, firstLine, stamp } from '../lib/format.js';
 import { pendingFor, rowContext } from '../lib/derive.js';
 import { store, setView } from '../lib/store.js';
 import { openLink } from '../ui/links.js';
 import { openRun } from '../ui/dialogs.js';
 
 const COLS = [
-  { key: 'name', label: 'Project', cls: 'c-name', sortable: true },
-  { key: 'ctx', label: 'Activity', cls: 'c-ctx' },
-  { key: 'state', label: 'State', cls: 'c-state', sortable: true },
-  { key: 'sessions', label: 'Sessions', cls: 'c-sessions', sortable: true },
-  { key: 'when', label: 'Last active', cls: 'c-when', sortable: true },
-  { key: 'next', label: 'Next run', cls: 'c-next', sortable: true }
+  { key: 'name', label: 'Project', cls: 'c-name', sortable: true,
+    help: 'The project name and the folder it lives in. Click a row to open it.' },
+  { key: 'ctx', label: 'Activity', cls: 'c-ctx',
+    help: 'What this project is doing or waiting on: the question an agent asked, the live session, '
+      + 'the running or next scheduled task, or the last run\u2019s summary — whichever is most urgent.' },
+  { key: 'state', label: 'State', cls: 'c-state', sortable: true,
+    help: 'Blocked, Running, Scheduled, Idle or Archived. A project is in exactly one. '
+      + 'A failed run counts as Blocked, because it is another thing waiting on a human.' },
+  { key: 'sessions', label: 'Sessions', cls: 'c-sessions', sortable: true,
+    help: 'How many transcripts this project has. Click the number to list them and reopen any one.' },
+  { key: 'when', label: 'Last active', cls: 'c-when', sortable: true,
+    help: 'Time since anything happened here — a session turn or an unattended run.' },
+  { key: 'next', label: 'Next run', cls: 'c-next', sortable: true,
+    help: 'When the next agenda task fires. \u201Coff\u201D means autonomy is disabled for this project; '
+      + '\u201C\u2014\u201D means nothing is scheduled.' }
 ];
 
 function sortVal(p, key, s) {
@@ -81,6 +90,7 @@ export function renderRoster(s) {
       tbl.append(groupHeader(s, p.state, rows.filter((r) => r.state === p.state).length));
     }
     tbl.append(row(p, s, grouped));
+    if (store.view.expanded.includes(p.id)) tbl.append(sessionList(p));
   }
 
   if (keep) $(`.tr[data-project-id="${CSS.escape(keep)}"]`, tbl)?.focus();
@@ -91,14 +101,14 @@ function header(s) {
   head.append(elx('span', 'c-dot', null, { role: 'columnheader', 'aria-label': 'Status' }));
 
   for (const c of COLS) {
-    const cell = elx('span', c.cls, null, { role: 'columnheader' });
+    const cell = elx('span', c.cls, null, { role: 'columnheader', title: c.help || null });
     if (!c.sortable) { cell.textContent = c.label; head.append(cell); continue; }
 
     const on = store.view.sortBy === c.key;
     const dir = on ? (store.view.sortDir > 0 ? 'ascending' : 'descending') : 'none';
     cell.setAttribute('aria-sort', dir);
     const b = elx('button', null, null, { type: 'button',
-      title: `Sort by ${c.label.toLowerCase()}` });
+      title: `${c.help}\n\nClick to sort by ${c.label.toLowerCase()}.` });
     b.append(document.createTextNode(c.label));
     if (on) b.append(el('span', 'arrow', store.view.sortDir > 0 ? '↑' : '↓'));
     b.onclick = () => setView(on
@@ -161,8 +171,7 @@ function row(p, s, grouped) {
     : s.states.find((x) => x.id === p.state)?.detail || '';
   r.append(st);
 
-  r.append(elx('span', 'cell c-sessions dim', p.sessionCount ? String(p.sessionCount) : '—',
-    { role: 'cell' }));
+  r.append(sessionsCell(p));
   r.append(elx('span', 'cell c-when dim', p.lastActivity ? `${ago(p.lastActivity)} ago` : '—',
     { role: 'cell' }));
   r.append(elx('span', `cell c-next${p.nextAt ? '' : ' dim'}`,
@@ -178,6 +187,71 @@ function row(p, s, grouped) {
   return r;
 }
 
+/**
+ * The session count is a disclosure, not a statistic. Every session already
+ * carries a working resume link; until now the roster spent them on a number.
+ */
+function sessionsCell(p) {
+  const cell = elx('span', 'cell c-sessions', null, { role: 'cell' });
+  if (!p.sessionCount) { cell.className = 'cell c-sessions dim'; cell.textContent = '—'; return cell; }
+
+  const open = store.view.expanded.includes(p.id);
+  const b = elx('button', `disclose${open ? ' open' : ''}`, null, {
+    type: 'button', tabindex: '-1', 'aria-expanded': String(open),
+    title: open ? `Hide ${p.name}'s sessions` : `Show all ${plural(p.sessionCount, 'session')} in ${p.name}`
+  });
+  b.append(el('span', 'caret', '▸'), el('span', null, String(p.sessionCount)));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    const now = store.view.expanded;
+    setView({ expanded: open ? now.filter((x) => x !== p.id) : [...now, p.id] });
+  };
+  cell.append(b);
+  return cell;
+}
+
+/** Every session in a project, most in need of you first. */
+function sessionList(p) {
+  const host = el('div', 'sessions');
+  const order = [...p.sessions].sort((a, b) =>
+    (b.needsInput - a.needsInput) || (b.live - a.live) || (b.lastActivity - a.lastActivity));
+
+  for (const x of order) {
+    const item = el('div', 'sess');
+    const tone = x.needsInput ? 'attention' : x.live ? 'running' : '';
+    item.append(elx('i', `st ${tone}`, null, { 'aria-hidden': 'true' }));
+
+    const body = el('div', 'sbody');
+    const t = el('b', null, firstLine(x.title, 120) || 'untitled session');
+    body.append(t);
+    const meta = el('span', 'smeta');
+    const bits = [];
+    if (x.needsInput) bits.push('waiting on you');
+    else if (x.live) bits.push('live');
+    bits.push(`${ago(x.lastActivity)} ago`);
+    if (x.humanTurns) bits.push(plural(x.humanTurns, 'turn'));
+    if (x.gitBranch) bits.push(x.gitBranch);
+    meta.textContent = bits.join(' · ');
+    body.append(meta);
+    item.append(body);
+
+    const go = el('div', 'sgo');
+    const resume = elx('button', `btn sm${x.needsInput ? ' solid' : ''}`, 'Resume', {
+      type: 'button',
+      title: x.link ? `Reopen this session in ${p.harness} where it left off`
+        : `${p.harness} does not register a URL scheme, so a session cannot be reopened from here`
+    });
+    if (!x.link) resume.disabled = true;
+    resume.onclick = (e) => { e.stopPropagation(); openLink(x.link); };
+    go.append(resume);
+    item.append(go);
+
+    item.title = `Started ${stamp(x.startedAt)} · ${x.toolCalls || 0} tool calls`;
+    host.append(item);
+  }
+  return host;
+}
+
 function action(label, title, fn) {
   // taken out of the tab order: three buttons per row is 120 extra tab stops
   // at forty projects. Arrow keys reach them instead — see rowKeys.
@@ -191,7 +265,7 @@ function action(label, title, fn) {
  * between them. Enter opens the row's destination.
  */
 function rowKeys(e, row, go) {
-  const acts = [...row.querySelectorAll('.acts .btn')];
+  const acts = [...row.querySelectorAll('.disclose, .acts .btn')];
   const here = acts.indexOf(document.activeElement);
 
   if (e.key === 'Enter' || e.key === ' ') {

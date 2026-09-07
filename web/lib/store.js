@@ -15,7 +15,7 @@ const listeners = new Set();
 export const store = {
   data: null,
   /** view state — filter, sort, and which state chip is active */
-  view: { text: '', stateFilter: null, sortBy: 'state', sortDir: 1 }
+  view: { text: '', stateFilter: null, sortBy: 'state', sortDir: 1, expanded: [] }
 };
 
 let lastFingerprint = '';

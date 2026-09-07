@@ -69,9 +69,12 @@ function items() {
   }
 
   for (const p of s.projects) {
-    for (const x of p.sessions.filter((v) => !v.needsInput).slice(0, 6)) {
-      out.push({ group: 'Sessions', icon: '·', kind: p.name,
-        label: firstLine(x.title, 90) || 'untitled session', run: () => openLink(x.link) });
+    // a session that needs input used to be filtered out of this list entirely,
+    // which removed exactly the ones worth reopening
+    for (const x of p.sessions.slice(0, 8)) {
+      out.push({ group: 'Sessions', icon: x.live ? '◆' : '·', kind: p.name, hot: x.needsInput,
+        label: `${firstLine(x.title, 90) || 'untitled session'}${x.needsInput ? '  — waiting on you' : ''}`,
+        run: () => openLink(x.link) });
     }
   }
 
