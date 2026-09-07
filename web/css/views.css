@@ -121,27 +121,28 @@ tr.sessions-row td{padding:0 0 0 0;background:var(--surface-2)}
 @media (max-width:1200px){ .table .c-sessions,.table .c-when{display:none} }
 @media (max-width:900px) and (min-width:761px){ .table .c-next{display:none} .table{min-width:40rem} }
 
-/* On a phone the table stops being a table: each row stacks into a block —
-   name and badge, then the activity line, then the numbers, then actions. */
+/* On a phone the table stops being a table: each row wraps into a block —
+   name and badge, the activity line, the numbers, then actions. Flex, not
+   named grid areas: three cells sharing one area paint on top of each other. */
 @media (max-width:760px){
   .table,.table tbody{display:block}
   .table thead{display:none}
-  .table tr.row{display:grid;grid-template-columns:minmax(0,1fr) auto;
-    grid-template-areas:"name state" "ctx ctx" "meta meta" "acts acts";
-    gap:.45rem .8rem;padding:.9rem var(--pad);border-bottom:1px solid var(--border)}
+  .table tr.row{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem .6rem;
+    padding:.9rem var(--pad);border-bottom:1px solid var(--border)}
   .table tr.row td{display:block;padding:0;border:none;background:none!important}
   .table tr.row:focus-visible{box-shadow:inset 3px 0 0 var(--accent)}
-  .table td.c-name{grid-area:name;min-width:0}
-  .table td.c-state{grid-area:state;align-self:start}
-  .table td.c-ctx{grid-area:ctx;max-width:none}
+  .table td.c-name{order:1;flex:1 1 55%;min-width:0}
+  .table td.c-state{order:2;margin-left:auto;align-self:flex-start}
+  .table td.c-ctx{order:3;flex-basis:100%;max-width:none}
   .table td.c-ctx .ctx .txt{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-  .table td.c-sessions,.table td.c-when,.table td.c-next{grid-area:meta;display:inline-flex;align-items:center;gap:.35em;
-    font-size:var(--t-sm);color:var(--text-3)}
-  .table td.c-sessions{display:inline-flex}
-  .table td.c-when::before{content:"active";margin-right:.35em;color:var(--text-4)}
-  .table td.c-next::before{content:"next";margin-right:.35em;color:var(--text-4)}
-  .table td.c-when,.table td.c-next{margin-left:1rem}
-  .table td.c-acts{grid-area:acts;text-align:left;display:flex;gap:.3rem}
+  .table td.c-sessions,.table td.c-when,.table td.c-next{display:inline-flex;align-items:center;gap:.3em;
+    font-size:var(--t-sm);color:var(--text-3);white-space:nowrap}
+  .table td.c-sessions{order:4}
+  .table td.c-when{order:5}
+  .table td.c-next{order:6}
+  .table td.c-when::before{content:"active";color:var(--text-4);margin-right:.35em}
+  .table td.c-next::before{content:"next";color:var(--text-4);margin-right:.35em}
+  .table td.c-acts{order:7;flex-basis:100%;text-align:left;display:flex;gap:.3rem;margin-top:.2rem}
   .table td.c-acts .btn{opacity:1;background:var(--surface-2);border-color:var(--border)}
   .table tr.group{display:block}
   .table tr.group td{display:block;padding:1rem var(--pad) .3rem}

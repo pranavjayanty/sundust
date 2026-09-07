@@ -132,7 +132,8 @@ kbd{font-family:var(--mono);font-size:var(--t-xs);color:var(--text-3);background
 .chip .x{color:var(--text-4)}
 
 /* ---------------------------------------------------------------- tabs */
-.tabs{display:flex;gap:.2rem;border-bottom:1px solid var(--border);overflow-x:auto}
+.tabs{display:flex;gap:.2rem;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
 .tab{all:unset;cursor:pointer;padding:.6em .8em;font-size:var(--t-md);font-weight:500;color:var(--text-3);
   border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;display:inline-flex;align-items:center;gap:.4em}
 .tab:hover{color:var(--text)}
@@ -152,7 +153,8 @@ kbd{font-family:var(--mono);font-size:var(--t-xs);color:var(--text-3);background
 dialog{border:none;padding:0;background:transparent;color:inherit;max-width:100vw}
 dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
 .modal{background:var(--surface);border:1px solid var(--border-2);border-radius:var(--r-lg);box-shadow:var(--shadow);
-  width:min(36rem,94vw);max-height:88vh;overflow-y:auto;padding:1.4rem 1.6rem 1.5rem}
+  width:min(36rem,94vw);max-height:calc(100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;padding:1.4rem 1.6rem 1.5rem}
+@media (max-width:620px){ .modal{padding:1.1rem 1.1rem 1.2rem} .modal-head h2{font-size:var(--t-lg)} }
 .modal.wide{width:min(48rem,94vw)}
 .modal-head{display:flex;align-items:center;gap:1rem;margin-bottom:.4rem}
 .modal-head h2{font-size:var(--t-xl);flex:1}
@@ -164,7 +166,7 @@ dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
   background:var(--surface);border-left:1px solid var(--border-2);box-shadow:var(--shadow);flex-direction:column;overflow:hidden}
 .panel[open]{display:flex;animation:slide .18s ease-out}
 @keyframes slide{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
-.panel-head{padding:1.2rem var(--pad) 0;display:flex;flex-direction:column;gap:.9rem;flex:none;background:var(--surface)}
+.panel-head{padding:calc(1.2rem + env(safe-area-inset-top)) var(--pad) 0;display:flex;flex-direction:column;gap:.9rem;flex:none;background:var(--surface)}
 .panel-title{display:flex;align-items:flex-start;gap:.8rem}
 .panel-title .ptile{width:2.6rem;height:2.6rem;font-size:1.05rem;border-radius:10px}
 .panel-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:.25rem}
@@ -172,7 +174,7 @@ dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
 .panel-meta{display:flex;flex-wrap:wrap;gap:.4rem .9rem;align-items:center;font-size:var(--t-sm);color:var(--text-3)}
 .panel-meta .mono{font-size:var(--t-xs)}
 .panel-actions{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center}
-.panel-body{flex:1;overflow-y:auto;padding:1.2rem var(--pad) 4rem;display:flex;flex-direction:column;gap:1.4rem}
+.panel-body{flex:1;overflow-y:auto;padding:1.2rem var(--pad) calc(4rem + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:1.4rem}
 .sec{display:flex;flex-direction:column;gap:.7rem}
 .sec-h{display:flex;align-items:center;gap:.6rem;font-size:var(--t-sm);font-weight:600;color:var(--text-3);
   text-transform:uppercase;letter-spacing:.05em}
@@ -244,7 +246,7 @@ dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
 .pal-none{padding:1.6rem 1rem;color:var(--text-3)}
 
 /* -------------------------------------------------------------- toasts */
-.toasts{position:fixed;bottom:1.4rem;left:50%;transform:translateX(-50%);z-index:70;display:flex;flex-direction:column;gap:.5rem;align-items:center;pointer-events:none}
+.toasts{position:fixed;bottom:calc(1.4rem + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:70;display:flex;flex-direction:column;gap:.5rem;align-items:center;pointer-events:none}
 .toast{background:var(--surface);border:1px solid var(--border-2);border-radius:var(--r);padding:.7rem .7rem .7rem 1rem;font-size:var(--t-md);
   box-shadow:var(--shadow);max-width:min(36rem,92vw);display:flex;gap:.8rem;align-items:center;pointer-events:auto;color:var(--text)}
 .toast.bad{border-color:color-mix(in srgb,var(--red) 50%,transparent);background:color-mix(in srgb,var(--red-wash) 60%,var(--surface))}
@@ -260,4 +262,19 @@ dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
 .help-k.mono{font-family:var(--mono);font-weight:500;font-size:var(--t-sm)}
 .help-v{color:var(--text-2);line-height:1.55}
 .help-v .row{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem}
-@media (max-width:560px){ .help-row,.kv,.field-row{grid-template-columns:1fr} }
+@media (max-width:640px){
+  /* the panel takes the whole phone; actions and tabs go icon-first so they fit on one line */
+  .panel{width:100vw;border-left:none}
+  .panel-actions{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .panel-actions::-webkit-scrollbar{display:none}
+  .panel-actions .btn:not(.primary) span{display:none}
+  .panel-actions .btn:not(.primary){padding:.5em;width:2.3em;justify-content:center}
+  .panel-actions .spacer{display:none}
+  .tabs{gap:0}
+  .tab{padding:.6em .55em;font-size:var(--t-sm)}
+  .tab span:not(.count){display:none}
+  .tab[aria-selected=true] span:not(.count){display:inline}
+  .kv{grid-template-columns:minmax(5.5rem,7.5rem) 1fr}
+  .kv select.input{min-width:0;width:100%}
+}
+@media (max-width:560px){ .help-row,.field-row{grid-template-columns:1fr} }

@@ -21,7 +21,9 @@
 <script>
   /* applied before first paint so nothing flashes */
   try {
-    const t = localStorage.getItem('sundust-theme'); if (t) document.documentElement.dataset.theme = t;
+    // ?theme=dark|light wins for this load (shareable links, screenshots); otherwise the saved choice
+    const q = new URLSearchParams(location.search).get('theme');
+    const t = q || localStorage.getItem('sundust-theme'); if (t) document.documentElement.dataset.theme = t;
     const d = localStorage.getItem('sundust-density'); if (d && d !== 'comfortable') document.documentElement.dataset.density = d;
   } catch {}
 </script>

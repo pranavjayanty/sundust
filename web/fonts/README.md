@@ -1,0 +1,1 @@
+Inter (rsms/inter) and JetBrains Mono (JetBrains/JetBrainsMono), Latin and Latin Extended subsets, variable weight, downloaded from Google Fonts. Both are licensed under the SIL Open Font License 1.1; see LICENSE-OFL.txt.

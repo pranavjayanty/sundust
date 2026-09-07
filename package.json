@@ -2,7 +2,7 @@
   "name": "sundust",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-first mission control for your Claude Code projects.",
+  "description": "Mission control for the projects you run with a coding agent. Local-first, no account.",
   "type": "module",
   "bin": {
     "sundust": "./bin/sundust.js"
@@ -15,5 +15,18 @@
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pranavjayanty/sundust.git"
+  },
+  "homepage": "https://github.com/pranavjayanty/sundust",
+  "keywords": [
+    "claude-code",
+    "coding-agent",
+    "dashboard",
+    "scheduler",
+    "local-first"
+  ]
 }
