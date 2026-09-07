@@ -145,7 +145,12 @@ dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
    project without leaving the console. */
 .drawer{position:fixed;inset:0 0 0 auto;margin:0;height:100dvh;max-height:100dvh;
   width:min(48rem,96vw);background:var(--sheet);border-left:1px solid var(--line);
-  box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+  box-shadow:var(--shadow);flex-direction:column;overflow:hidden}
+/* display is set only while open. An author `display:flex` on the dialog
+   itself outranks the browser's dialog:not([open]){display:none}, which left
+   a closed drawer painted down the right of the page and eating clicks. */
+.drawer[open]{display:flex}
+.drawer:not([open]){display:none}
 .drawer[open]{animation:slide .18s ease-out}
 @keyframes slide{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
 .dr-head{padding:var(--s4) var(--s5) var(--s3);border-bottom:1px solid var(--line);
