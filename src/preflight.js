@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { getHarness } from './harnesses.js';
 import { getSettings } from './config.js';
+import { envFor, hasToken, permsLoose } from './credentials.js';
 
 /**
  * Ask each harness in use whether it can actually authenticate.
@@ -24,7 +25,8 @@ export function harnessAuth(harnessId) {
     const bin = getSettings().bins?.[h.id] || h.bin;
     try {
       const out = execFileSync(bin, h.authProbe.args, {
-        encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'ignore']
+        encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'ignore'],
+        env: { ...process.env, ...envFor(h.id) }
       });
       const parsed = h.authProbe.parse(out);
       if (parsed) value = { harness: h.id, label: h.label, known: true, ...parsed, bin };
@@ -55,7 +57,12 @@ export function tokenEnv(harnessId = 'claude-code') {
   const vars = { 'claude-code': ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'] };
   const names = vars[harnessId] || [];
   const present = names.filter((n) => (process.env[n] || '').trim().length > 0);
-  return { names, present, has: present.length > 0 };
+  const stored = hasToken(harnessId);
+  return {
+    names, present, stored,
+    source: present.length ? 'environment' : stored ? 'sundust' : null,
+    has: present.length > 0 || stored
+  };
 }
 
 /** One line per harness that any non-archived project actually uses. */
@@ -83,9 +90,12 @@ export function authBlocker(results) {
  * environment: runs work now and stop working within a day.
  */
 export function tokenAdvice(results) {
+  if (permsLoose()) {
+    return 'The stored token file is readable by others. Run `chmod 600 ~/.sundust/credentials.json`.';
+  }
   const r = results.find((x) => x.ok && x.token && !x.token.has);
   if (!r) return null;
-  return `${r.label} is signed in, but this process has no ${r.token.names[0]}. `
-    + `An interactive session expires within hours — run \`${r.bin} setup-token\` and export it `
-    + `in the shell you start Sundust from, so unattended runs keep working.`;
+  return `${r.label} works right now but holds no long-lived token, so unattended runs `
+    + `will stop when this session expires. Run \`${r.bin} setup-token\`, then `
+    + `\`sundust auth\` to store it — after that runs no longer depend on the shell Sundust started from.`;
 }

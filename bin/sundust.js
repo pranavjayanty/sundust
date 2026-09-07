@@ -8,6 +8,8 @@ import { loadProjects, scaffold, adopt, relocate } from '../src/projects.js';
 import { tick, runTask, describeCron } from '../src/autonomy.js';
 import { TEMPLATES } from '../src/templates.js';
 import * as deep from '../src/deeplink.js';
+import { setToken, clearToken, hasToken, storedHarnesses, credentialsPath, tokenVarFor } from '../src/credentials.js';
+import { preflight, authBlocker, tokenAdvice } from '../src/preflight.js';
 
 const C = {
   dim: (s) => `\x1b[2m${s}\x1b[0m`, b: (s) => `\x1b[1m${s}\x1b[0m`,
@@ -88,6 +90,66 @@ switch (cmd) {
     console.log(`\n  ${project.emoji} ${C.b(project.name)}\n  ${C.dim(project.path)}`);
     console.log(`  ${C.dim('agenda:')} ${(project.agenda || []).map((a) => a.title).join(', ') || 'none'}\n`);
     if (!has('no-open')) { openUrl(deep.newSession({ folder: project.path, prompt: seed })); console.log(C.dim('  opening Claude…\n')); }
+    break;
+  }
+
+  case 'auth': {
+    const harness = flag('harness', 'claude-code');
+    if (has('clear')) {
+      clearToken(harness);
+      console.log(`  cleared stored token for ${harness}`);
+      break;
+    }
+    if (has('status') || args[1] === 'status') {
+      const results = preflight([{ harness }]);
+      const r = results[0];
+      console.log(`\n  ${C.b(harness)}`);
+      console.log(`  signed in : ${r?.ok ? C.g('yes') : C.r('no')}${r?.method ? C.dim(` (${r.method})`) : ''}`);
+      console.log(`  token     : ${r?.token?.has ? C.g(r.token.source) : C.dim('none stored')}`);
+      const msg = authBlocker(results) || tokenAdvice(results);
+      if (msg) console.log(`\n  ${C.y(msg)}`);
+      console.log('');
+      break;
+    }
+
+    // Read the token without it ever reaching scrollback or shell history:
+    // piped stdin when available, otherwise a prompt with echo turned off.
+    const readSecret = () => new Promise((resolve) => {
+      if (!process.stdin.isTTY) {
+        let buf = '';
+        process.stdin.setEncoding('utf8');
+        process.stdin.on('data', (d) => { buf += d; });
+        process.stdin.on('end', () => resolve(buf.trim()));
+        return;
+      }
+      process.stdout.write(`  Paste the token from \`claude setup-token\` (input hidden): `);
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+      let buf = '';
+      process.stdin.on('data', function onData(ch) {
+        if (ch === '\r' || ch === '\n' || ch === '\u0004') {
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
+          process.stdin.removeListener('data', onData);
+          process.stdout.write('\n');
+          resolve(buf.trim());
+        } else if (ch === '\u0003') { process.stdout.write('\n'); process.exit(1); }
+        else if (ch === '\u007f') { buf = buf.slice(0, -1); }
+        else buf += ch;
+      });
+    });
+
+    readSecret().then((token) => {
+      if (!token) { console.error('  no token given'); process.exit(1); }
+      if (!/^sk-ant-/.test(token)) {
+        console.error(`  ${C.r('that does not look like a token')} — expected it to start with sk-ant-`);
+        process.exit(1);
+      }
+      const out = setToken(harness, token);
+      console.log(`  ${C.g('✓')} stored for ${C.b(harness)} ${C.dim(`(${out.file}, mode 600)`)}`);
+      console.log(C.dim(`  runs now get ${tokenVarFor(harness)} regardless of which shell starts Sundust\n`));
+    });
     break;
   }
 
@@ -200,6 +262,8 @@ switch (cmd) {
     ${C.b('new')} <name>         scaffold a project and open Claude in it
                        ${C.dim('--template blank|finance|recipes|fitness|journal')}
                        ${C.dim('--autonomy off|read|edit')}
+    ${C.b('auth')}               store a long-lived token so runs work from any shell
+                       ${C.dim('--status to check, --clear to remove')}
     ${C.b('adopt')} [dir]        bring an existing folder into Sundust
     ${C.b('relocate')} <m> <dir>  point a project at a folder you moved
     ${C.b('ls')} [--v]           list projects and status

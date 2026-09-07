@@ -293,10 +293,25 @@ it in whatever shell you start Sundust from — it reaches runs through the
 process environment, so a daemon launched from launchd or another terminal
 will not see a token exported only in your interactive shell.
 
-Sundust checks both up front: it reports a signed-out harness before anything
-runs, and separately warns when a harness is signed in but the process holds no
-long-lived token, because that combination works today and stops working
-tomorrow.
+Store the token with Sundust rather than exporting it, and runs stop depending
+on which shell started the daemon:
+
+```
+claude setup-token          # mint it
+sundust auth                # paste it; input is hidden, nothing hits scrollback
+```
+
+It lands in `~/.sundust/credentials.json` at mode 600 and is injected into each
+run's environment. An explicit shell export still wins, so nothing changes if you
+prefer the environment.
+
+Sundust checks this up front: it reports a signed-out harness before anything
+runs, and separately warns when a harness works now but holds no long-lived
+token — that combination works today and stops working tomorrow.
+
+One limit worth knowing: `claude auth status` validates a token's shape, not the
+token, so a revoked or expired one still reads as signed in. Runs are the only
+thing that finds out, so their auth failures are surfaced as a second signal.
 
 If a login appears to succeed but nothing changes, inspect the stored record
 rather than its timestamp — a hollow entry (`accessToken: ""`) reads as

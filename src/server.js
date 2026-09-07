@@ -142,7 +142,15 @@ export function buildState() {
   // nothing about whether unattended runs will.
   const allRuns = recentRuns(30);
   const auth = preflight(projects);
-  const authWarn = authBlocker(auth) || tokenAdvice(auth);
+  // `auth status` validates the shape of a token, not the token itself, so a
+  // revoked or expired one still reads as signed in. Runs are the only place
+  // that finds out, so keep their failures as a second signal.
+  const authFail = allRuns.find(
+    (r) => r.ok === false && /authenticat|oauth|expired|revoked|401|unauthor/i.test(r.error || '')
+  );
+  const authWarn = authBlocker(auth)
+    || (authFail ? `A run failed to authenticate ${new Date(authFail.endedAt || authFail.startedAt).toLocaleString()}. The token may be expired or revoked — mint a new one with \`claude setup-token\` and store it with \`sundust auth\`.` : null)
+    || tokenAdvice(auth);
 
   // Edits made while you were away, waiting on a yes or a no.
   const review = [];

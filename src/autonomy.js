@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { RUNS_DIR, ASKS, EVENTS, NOTES_DIR, getSettings, readJSON, writeJSON } from './config.js';
 import { readUsage } from './usage.js';
 import { harnessAuth } from './preflight.js';
+import { envFor } from './credentials.js';
 import { loadProjects, upsertProject } from './projects.js';
 import { scanSessions } from './scan.js';
 import { getHarness, DEFAULT_HARNESS } from './harnesses.js';
@@ -258,7 +259,8 @@ export function runTask({ project, task, trigger = 'schedule' }) {
   active.add(runId);
   const child = spawn(bin, args, {
     cwd: project.path,
-    env: { ...process.env, SUNDUST_RUN: '1' },
+    // a stored token makes runs independent of the shell that started Sundust
+    env: { ...process.env, ...envFor(harness.id), SUNDUST_RUN: '1' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
