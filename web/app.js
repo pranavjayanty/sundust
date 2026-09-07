@@ -78,7 +78,10 @@ function pendingItems() {
   }
   for (const p of STATE.projects) {
     for (const s of p.sessions.filter((x) => x.needsInput)) {
-      out.push({ kind: 'session', project: p.name, projectId: p.id, text: s.title, link: s.link });
+      // the assistant's last words are what it is waiting on you about
+      const waitingOn = (s.lastAssistant?.text || s.title || '').split('\n').find(Boolean) || s.title;
+      out.push({ kind: 'session', project: p.name, projectId: p.id,
+        text: waitingOn.slice(0, 140), link: s.link });
     }
   }
   for (const p of STATE.projects) {
@@ -273,10 +276,14 @@ function renderCounts(s) {
   const by = (id) => s.projects.filter((p) => p.state === id).length;
   const pending = pendingItems().length;
   const live = s.projects.filter((p) => p.state !== 'archived').length;
+  // count projects that have upcoming work, not just those whose current state
+  // happens to be "scheduled" — otherwise a project that is also running reads
+  // as zero while the schedule below plainly lists its runs
+  const scheduled = s.projects.filter((p) => p.nextAt).length;
   host.append(
     countBtn('Blocked', pending, 'blocked'),
     countBtn('Running', by('running') + s.activeRuns, 'running'),
-    countBtn('Scheduled', by('scheduled'), 'scheduled'),
+    countBtn('Scheduled', scheduled, 'has-schedule'),
     countBtn('Projects', live, null)
   );
   const arch = by('archived');
@@ -330,7 +337,9 @@ function sortVal(p, key) {
 function renderRoster(s) {
   const tbl = $('#tbl'); tbl.innerHTML = '';
   let rows = s.projects;
-  if (countFilter) rows = rows.filter((p) => p.state === countFilter);
+  if (countFilter === 'has-schedule') rows = rows.filter((p) => p.nextAt);
+  else if (countFilter === 'blocked') rows = rows.filter((p) => pendingFor(p.id).length);
+  else if (countFilter) rows = rows.filter((p) => p.state === countFilter);
   if (filterText) {
     const q = filterText.toLowerCase();
     rows = rows.filter((p) => `${p.name} ${p.path} ${p.harness}`.toLowerCase().includes(q));

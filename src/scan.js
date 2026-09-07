@@ -4,6 +4,9 @@ import { CLAUDE_PROJECTS, CLAUDE_SESSIONS, INDEX_CACHE, readJSON, writeJSON } fr
 
 const TEXT_CLIP = 1200;
 
+// How long a live session must sit unanswered before it counts as waiting on you.
+const IDLE_BEFORE_BLOCKED = 10 * 60 * 1000;
+
 /** Sessions the desktop app / CLI currently has running, keyed by session uuid. */
 export function liveSessions() {
   const out = new Map();
@@ -185,8 +188,12 @@ export function scanSessions() {
         pid: liveRec?.pid || null,
         liveName: liveRec?.name || null,
         // A live session whose transcript ends on a plain assistant reply is
-        // sitting at the prompt waiting for the human.
-        needsInput: Boolean(liveRec) && acc.tailState === 'awaiting-human'
+        // sitting at the prompt waiting for the human — but only once it has sat
+        // there a while. Without the dwell, the session you are actively typing
+        // in reads as blocked between every single turn.
+        needsInput: Boolean(liveRec)
+          && acc.tailState === 'awaiting-human'
+          && Date.now() - acc.lastTs > IDLE_BEFORE_BLOCKED
       });
     }
   }

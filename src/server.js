@@ -145,8 +145,13 @@ export function buildState() {
   // `auth status` validates the shape of a token, not the token itself, so a
   // revoked or expired one still reads as signed in. Runs are the only place
   // that finds out, so keep their failures as a second signal.
+  // Only failures newer than the newest success matter: a run that has since
+  // been followed by a working one is history, not a live problem.
+  const lastOkAt = allRuns.filter((r) => r.ok).reduce((m, r) => Math.max(m, r.endedAt || r.startedAt || 0), 0);
   const authFail = allRuns.find(
-    (r) => r.ok === false && /authenticat|oauth|expired|revoked|401|unauthor/i.test(r.error || '')
+    (r) => r.ok === false
+      && (r.endedAt || r.startedAt || 0) > lastOkAt
+      && /authenticat|oauth|expired|revoked|401|unauthor/i.test(r.error || '')
   );
   const authWarn = authBlocker(auth)
     || (authFail ? `A run failed to authenticate ${new Date(authFail.endedAt || authFail.startedAt).toLocaleString()}. The token may be expired or revoked — mint a new one with \`claude setup-token\` and store it with \`sundust auth\`.` : null)
