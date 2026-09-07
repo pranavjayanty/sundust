@@ -129,6 +129,13 @@ Sundust can answer later whether its output was **kept**, **reverted**, or
 **superseded**. Over enough runs that tells you which agenda tasks earn their
 tokens.
 
+### Looking outside the project folder
+
+Read-only work often needs data that does not live in the repo. A project can
+list `extraDirs`, and a single task can add its own `dirs`; both become
+`--add-dir` on the run. Without this a `read` run is denied the file and has to
+come back and ask you for access, which wastes the run.
+
 ### Autonomy levels
 
 Set per project. New projects default to `read`.

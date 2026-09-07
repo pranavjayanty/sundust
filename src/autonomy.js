@@ -235,11 +235,15 @@ export function runTask({ project, task, trigger = 'schedule' }) {
   const mayWrite = project.autonomy === 'edit';
   const checkpoint = mayWrite ? snapshot(project) : null;
 
+  // Directories this project may look at beyond its own folder. Task-level
+  // entries add to the project's, so one task can widen access on its own.
+  const dirs = [...new Set([...(project.extraDirs || []), ...(task.dirs || [])])];
+
   const record = {
     runId, sessionId, trigger,
     projectId: project.id, projectPath: project.path,
     taskId: task.id || null, taskTitle: task.title || 'Ad-hoc run',
-    prompt: task.prompt, autonomy: project.autonomy, harness: harness.id,
+    prompt: task.prompt, autonomy: project.autonomy, harness: harness.id, dirs,
     checkpoint, changes: null, protected: mayWrite ? checkpoint.kind === 'git' : null,
     startedAt, state: 'running',
     endedAt: null, ok: null, summary: null, question: null,
@@ -252,7 +256,8 @@ export function runTask({ project, task, trigger = 'schedule' }) {
     prompt: preambleFor(project) + task.prompt,
     sessionId,
     autonomy: project.autonomy,
-    model: project.model
+    model: project.model,
+    dirs
   });
   const bin = project.bin || settings.bins?.[harness.id] || harness.bin;
 

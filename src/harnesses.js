@@ -23,10 +23,13 @@ export const HARNESSES = {
     transcripts: { dir: path.join(HOME, '.claude', 'projects'), format: 'claude-jsonl' },
     liveSessions: { dir: path.join(HOME, '.claude', 'sessions'), format: 'pid-json' },
     /** Headless invocation. `autonomy` is Sundust's per-project permission level. */
-    headlessArgs({ prompt, sessionId, autonomy, model }) {
+    headlessArgs({ prompt, sessionId, autonomy, model, dirs = [] }) {
       const args = ['-p', prompt, '--output-format', 'json'];
       if (sessionId) args.push('--session-id', sessionId);
       if (model) args.push('--model', model);
+      // Read-only work often needs to look at data outside its own folder;
+      // without this the run is denied and has to come back and ask.
+      for (const d of dirs) args.push('--add-dir', d);
       if (autonomy === 'edit') args.push('--permission-mode', 'acceptEdits');
       else args.push('--permission-mode', 'dontAsk', '--disallowedTools', 'Write', 'Edit', 'NotebookEdit', 'Bash');
       return args;
