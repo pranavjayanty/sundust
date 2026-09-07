@@ -1,0 +1,82 @@
+/* Sundust — design tokens.
+
+   One ramp, two themes, and a hard rule: every step used for TEXT clears
+   4.5:1 against its background in both light and dark. The old ramp bottomed
+   out at 3.0:1 and spent it on the things you actually read — paths,
+   timestamps, column headers — so the console looked calm and read badly.
+
+   --ink-mute is the escape hatch for marks that are not text: rules, tracks,
+   the resting state of a bar. Never set type in it. */
+
+:root{
+  --amber:#ffb020;          /* 10.8:1 — wordmark only */
+  --bad:#f8705f;            /*  7.0:1 — failure only */
+
+  --bg:#0b0b0c;
+  --tint:rgba(255,255,255,.028); --tint-2:rgba(255,255,255,.055);
+  --line:rgba(255,255,255,.085); --line-2:rgba(255,255,255,.16);
+
+  --ink:#f2f2f3;            /* 17.6:1 */
+  --ink-2:#b6b6bd;          /*  9.8:1 */
+  --ink-3:#93939c;          /*  6.5:1 */
+  --ink-4:#7c7c86;          /*  4.8:1 — softest type on the page */
+  --ink-mute:#5d5d66;       /*  3.0:1 — NOT for text */
+
+  --field-ink:rgba(255,255,255,.07);
+  --mark-ink:rgba(255,255,255,.16);
+  --sheet:#141416;
+  --shadow:0 30px 80px rgba(0,0,0,.5);
+  --focus:var(--ink-2);
+
+  --s1:4px; --s2:8px; --s3:12px; --s4:18px; --s5:26px; --s6:40px; --s7:64px;
+  --r:8px;
+  --gutter:clamp(18px,4vw,44px);
+  --display:"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --body:-apple-system,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
+  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,monospace;
+
+  /* type floor: nothing smaller than 11px, tracking eased from .19em to .12em
+     so caps labels keep their word shapes */
+  --t-micro:11px;
+  --t-label:11px;
+  --t-body:13.5px;
+  --t-num:12.5px;
+  --track:.12em;
+
+  color-scheme:dark;
+}
+
+:root[data-theme="light"]{
+  --amber:#8a5606;          /* 5.9:1 — the old #b5710a was 3.8:1 and failed */
+  --bad:#b23325;            /* 5.9:1 */
+
+  --bg:#fbfaf9;
+  --tint:rgba(0,0,0,.022); --tint-2:rgba(0,0,0,.045);
+  --line:rgba(0,0,0,.10); --line-2:rgba(0,0,0,.18);
+
+  --ink:#15151a;            /* 17.5:1 */
+  --ink-2:#45454f;          /*  9.1:1 */
+  --ink-3:#5c5c67;          /*  6.3:1 */
+  --ink-4:#70707a;          /*  4.7:1 */
+  --ink-mute:#93939c;       /*  2.9:1 — NOT for text */
+
+  --field-ink:rgba(0,0,0,.055);
+  --mark-ink:rgba(0,0,0,.13);
+  --sheet:#fff;
+  --shadow:0 24px 60px rgba(60,55,45,.18);
+
+  color-scheme:light;
+}
+
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    --amber:#8a5606; --bad:#b23325;
+    --bg:#fbfaf9;
+    --tint:rgba(0,0,0,.022); --tint-2:rgba(0,0,0,.045);
+    --line:rgba(0,0,0,.10); --line-2:rgba(0,0,0,.18);
+    --ink:#15151a; --ink-2:#45454f; --ink-3:#5c5c67; --ink-4:#70707a; --ink-mute:#93939c;
+    --field-ink:rgba(0,0,0,.055); --mark-ink:rgba(0,0,0,.13);
+    --sheet:#fff; --shadow:0 24px 60px rgba(60,55,45,.18);
+    color-scheme:light;
+  }
+}

@@ -18,6 +18,20 @@ export function startField(canvas) {
 
   // target and eased pointer; start off-screen so the field rests flat
   let tx = -9999, ty = -9999, px = -9999, py = -9999, present = 0, targetPresent = 0;
+  let raf = 0, running = false;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* The stroke colour used to be read from computed style on every frame, for
+     every frame of the page's life. It only changes when the theme does. */
+  let inkCache = 'rgba(255,255,255,.07)';
+  const readInk = () => {
+    inkCache = getComputedStyle(document.documentElement)
+      .getPropertyValue('--field-ink').trim() || inkCache;
+  };
+  readInk();
+  new MutationObserver(() => { readInk(); wake(); })
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { readInk(); wake(); });
 
   function build() {
     const r = canvas.getBoundingClientRect();
@@ -46,8 +60,7 @@ export function startField(canvas) {
     present += (targetPresent - present) * EASE;
 
     ctx.clearRect(0, 0, w, h);
-    const style = getComputedStyle(document.documentElement);
-    ctx.strokeStyle = style.getPropertyValue('--field-ink').trim() || 'rgba(255,255,255,.5)';
+    ctx.strokeStyle = inkCache;
     ctx.lineWidth = 1;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -74,11 +87,24 @@ export function startField(canvas) {
       }
       ctx.stroke();
     }
-    requestAnimationFrame(frame);
+    // once the field has settled flat and the pointer has left, there is
+    // nothing left to animate — stop until something wakes it
+    const settled = present < 0.005 && Math.abs(tx - px) < 0.5 && Math.abs(ty - py) < 0.5;
+    if (settled && targetPresent === 0) { running = false; return; }
+    raf = requestAnimationFrame(frame);
+  }
+
+  function wake() {
+    if (running) return;
+    // hidden or reduced-motion still gets the resting field; only the loop stops
+    if (reduced || document.hidden) return drawStill();
+    running = true;
+    raf = requestAnimationFrame(frame);
   }
 
   let seen = false;
   const move = (x, y) => {
+    if (!reduced) wake();
     tx = x; ty = y; targetPresent = 1;
     // first contact snaps: easing in from off-screen would drag the well
     // across the whole page before it settled under the cursor
@@ -91,10 +117,27 @@ export function startField(canvas) {
   addEventListener('mousemove', (e) => move(e.clientX, e.clientY), { passive: true });
   addEventListener('pointerleave', () => { targetPresent = 0; });
   addEventListener('blur', () => { targetPresent = 0; });
-  addEventListener('resize', build);
+  addEventListener('resize', () => { build(); wake(); });
+  // nothing should animate behind a tab nobody is looking at
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { cancelAnimationFrame(raf); running = false; } else wake();
+  });
 
   build();
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(frame);
-  else { present = 0; frame(); }
-  return { rebuild: build };
+  wake();
+
+  /** One flat pass, for reduced-motion. */
+  function drawStill() {
+    present = 0; targetPresent = 0;
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = inkCache; ctx.lineWidth = 1;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const row of rows) {
+      ctx.beginPath();
+      row.pts.forEach((p, n) => (n === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+    }
+  }
+
+  return { rebuild: () => { build(); wake(); } };
 }

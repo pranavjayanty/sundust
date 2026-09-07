@@ -14,20 +14,30 @@ Serves the dashboard on `http://127.0.0.1:4173` and starts the scheduler.
 
 ## The console
 
-One screen, no hero block. Five counters, your plan usage, and the roster — and
-the roster is where the work happens.
+One screen, no hero block. It opens with the answer in a sentence — *"Nothing
+needs you · 1 running"*, or *"2 projects need you"* — then the state counts as
+what they always were: filters you can click. Plan usage sits beside them as a
+sparkline over the window's recent history, not a single bare percentage.
 
 The roster is a **table, not cards**. Cards stop working somewhere around eight
 projects; a dense sortable table still works at forty. Rows group by state, sort
 by any column, filter by name or path (`/`), and the whole row is one click into
-whatever wants you. When something *is* on you, the row swaps the folder path for
-the actual question the agent asked, so you can read the queue without opening
-anything.
+whatever wants you — the row says which destination that is before you click.
+
+The widest column is **Activity**: the question an agent is waiting on, the live
+session's subject, the next scheduled task, or the last run's summary, in that
+order of urgency. Nothing in the row is dead space.
 
 Amber belongs to the wordmark and nothing else. Emphasis elsewhere is carried by
 ink weight — a live count is bright, a zero is dim — and only failure gets a
 second hue. Helvetica titles and labels, SF Pro for prose and data, monospace for
-numerics so columns line up when you scan.
+numerics so columns line up when you scan. **Every ink step used for type clears
+4.5:1 in both themes**; there is a separate token for rules and tracks, and type
+is never set in it.
+
+Keyboard: `⌘K`/`Ctrl K` for the palette, `n` for a new project, `/` to filter,
+`t` for the theme. In the roster, Tab moves between rows, `↑↓` moves between
+them, `→` reaches a row's actions, and `↵` opens it.
 
 Light and dark are both real themes from one token set. Toggle in the header,
 with `t`, or from the palette; the choice is applied before first paint so there
@@ -45,9 +55,12 @@ Smaller marks answer the same gravity: a dot lattice on the counters that slides
 and swells toward the pointer, concentric rings that lean, a hatch that shears.
 All procedural, in the [Book of Shapes](https://bookofshapes.com) idiom — many
 fine elements, one colour, no fill — and all under about 17% opacity so they stay
-texture rather than decoration. One shared pointer listener drives every mark,
-marks outside the viewport are skipped, and everything stops under
-`prefers-reduced-motion`.
+texture rather than decoration. One shared pointer listener drives every mark and
+marks outside the viewport are skipped. The loops stop when there is nothing to
+animate: once the pointer leaves and the easing settles, no frame is scheduled
+until something moves again, and nothing runs behind a hidden tab. Under
+`prefers-reduced-motion` — or on a page that loads hidden — the texture is still
+painted once; only the motion is withheld.
 
 ## States
 
@@ -230,8 +243,13 @@ sundust run <match> [task] run an agenda task now, headless
 
 ## Keyboard
 
-- `⌘K` — palette: jump to a session, run a task, look up a limit, start something new
+- `⌘K` / `Ctrl K` — palette: jump to a session, run a task, start something new
 - `n` — new project
+- `/` — focus the roster filter
+- `t` — toggle the theme
+
+In the roster: Tab between rows, `↑↓` to move, `→` to reach a row's actions,
+`←` to come back, `↵` to open.
 
 ## Layout
 
@@ -250,8 +268,17 @@ src/deeplink.js    harness-aware links
 src/server.js      HTTP API + SSE
 web/field.js       full-viewport line field with pointer gravity
 web/marks.js       small reactive marks (dots, rings, hatch)
-web/               vanilla console, no build step
+web/app.js         wiring: boot, update loop, global keys
+web/css/           tokens → base → components → views
+web/lib/           dom, format, api, store, derive
+web/ui/            theme, toast, links, dialogs, palette
+web/views/         warn, lede, roster, schedule, review, panels
 ```
+
+The console is vanilla ES modules with no build step. State lives in one store;
+a payload that has not changed notifies no view, so the server's heartbeat costs
+a JSON parse rather than a full teardown, and a row you are hovering or have
+tabbed to stays where it is.
 
 When a project folder moves, `sundust relocate` records the old path as an alias.
 Transcripts store the working directory they ran in, so without that alias every

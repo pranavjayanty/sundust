@@ -6,24 +6,66 @@
    skipped, and each redraws only while the pointer is near enough to matter. */
 
 const pointer = { x: -9999, y: -9999, on: 0 };
-addEventListener('pointermove', (e) => { pointer.x = e.clientX; pointer.y = e.clientY; pointer.on = 1; }, { passive: true });
-addEventListener('pointerleave', () => { pointer.on = 0; }, { passive: true });
+addEventListener('pointermove', (e) => {
+  pointer.x = e.clientX; pointer.y = e.clientY; pointer.on = 1;
+  if (!REDUCED) wake();
+}, { passive: true });
+addEventListener('pointerleave', () => { pointer.on = 0; if (!REDUCED) wake(); }, { passive: true });
+// scrolling changes which marks the pointer is near, so it counts as movement
+addEventListener('scroll', () => { if (!REDUCED) wake(); }, { passive: true });
+addEventListener('resize', () => { if (!REDUCED) wake(); }, { passive: true });
 
 const marks = [];
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-function ink() {
-  return getComputedStyle(document.documentElement).getPropertyValue('--mark-ink').trim() || 'rgba(255,255,255,.4)';
+/* The mark colour was read from computed style once per frame, forever. It
+   changes only with the theme. */
+let inkCache = 'rgba(255,255,255,.16)';
+function readInk() {
+  inkCache = getComputedStyle(document.documentElement)
+    .getPropertyValue('--mark-ink').trim() || inkCache;
+}
+readInk();
+new MutationObserver(() => { readInk(); wake(); })
+  .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { readInk(); wake(); });
+
+let raf = 0, running = false;
+
+/* Wake the loop, and let it stop again once every mark has settled. Six marks
+   each doing a getBoundingClientRect per frame is six forced layouts per frame,
+   which is a real cost to pay forever for texture under 17% opacity. */
+export function wake() {
+  if (running) return;
+  // A page that is hidden, or a reader who asked for no motion, still gets the
+  // texture — it is part of the design. Only the loop is withheld.
+  if (REDUCED || document.hidden) return drawOnce();
+  running = true;
+  raf = requestAnimationFrame(tick);
 }
 
+/** One resting pass over every mark, with no loop behind it. */
+function drawOnce() {
+  for (const m of marks) {
+    const r = m.canvas.getBoundingClientRect();
+    if (!r.width) continue;
+    m.draw(r, inkCache);
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { cancelAnimationFrame(raf); running = false; } else wake();
+});
+
 function tick() {
-  const colour = ink();
+  let busy = 0;
   for (const m of marks) {
     const r = m.canvas.getBoundingClientRect();
     if (r.bottom < -60 || r.top > innerHeight + 60 || !r.width) continue;
-    m.draw(r, colour);
+    busy = Math.max(busy, m.draw(r, inkCache) || 0);
   }
-  requestAnimationFrame(tick);
+  if (!pointer.on && busy < 0.01) { running = false; return; }
+  raf = requestAnimationFrame(tick);
 }
 
 function setup(canvas) {
@@ -74,9 +116,11 @@ export function attachDots(canvas, { gap = 11, radius = 130, pull = 9 } = {}) {
           ctx.beginPath(); ctx.arc(px, py, rr, 0, Math.PI * 2); ctx.fill();
         }
       }
+      return ease;
     }
   };
   marks.push(m);
+  wake();
   return m;
 }
 
@@ -108,9 +152,11 @@ export function attachRings(canvas, { count = 13, radius = 170, pull = 16 } = {}
         ctx.ellipse(cx + ox, cy + oy, t * maxR, t * maxR * 0.58, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
+      return ease;
     }
   };
   marks.push(m);
+  wake();
   return m;
 }
 
@@ -141,10 +187,12 @@ export function attachHatch(canvas, { gap = 7, radius = 150, pull = 13 } = {}) {
         }
         ctx.stroke();
       }
+      return ease;
     }
   };
   marks.push(m);
+  wake();
   return m;
 }
 
-requestAnimationFrame(tick);
+wake();

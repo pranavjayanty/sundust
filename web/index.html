@@ -4,73 +4,100 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Sundust</title>
-<link rel="stylesheet" href="/style.css">
+<meta name="description" content="Local-first mission control for the projects you run with a coding agent.">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/views.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230b0b0c'/><circle cx='16' cy='16' r='5.5' fill='%23ffb020'/></svg>">
 <script>
+  /* applied before first paint so the theme never flashes */
   try { const t = localStorage.getItem('sundust-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
 </script>
 </head>
 <body>
 <canvas id="field" aria-hidden="true"></canvas>
+<a class="skip" href="#tbl">Skip to projects</a>
 
 <header class="bar">
   <div class="wrap bar-in">
-    <div class="word"><span class="dot"></span>Sundust</div>
+    <div class="word"><span class="dot" aria-hidden="true"></span>Sundust</div>
     <div class="bar-actions">
-      <button class="btn icon" id="btn-theme" title="Toggle theme (t)" aria-label="Toggle theme"></button>
-      <button class="btn" id="btn-palette" title="Command palette"><kbd>⌘K</kbd></button>
-      <button class="btn solid" id="btn-new">New project</button>
+      <button class="btn icon" id="btn-theme" type="button" aria-label="Toggle theme"></button>
+      <button class="btn" id="btn-palette" type="button" title="Search projects, sessions and tasks">
+        Search <kbd id="kbd-mod">⌘K</kbd>
+      </button>
+      <button class="btn solid" id="btn-new" type="button" title="Scaffold a new project (n)">New project</button>
     </div>
   </div>
 </header>
 
 <main class="wrap">
   <div id="warn"></div>
-  <section class="counts" id="counts"></section>
-  <section class="usage" id="usage"></section>
 
-  <section class="review" id="review-sec" hidden>
+  <!-- the answer first, then the counts as what they are: filters -->
+  <section class="lede" aria-labelledby="lede-h">
+    <h1 class="lede-h" id="lede-h"></h1>
+    <p class="lede-sub" id="lede-sub"></p>
+    <div class="chips" id="chips" role="group" aria-label="Filter projects by state"></div>
+    <div class="usage" id="usage" aria-label="Plan usage"></div>
+  </section>
+
+  <section class="review" id="review-sec" aria-labelledby="review-lbl" hidden>
     <div class="sechead">
-      <canvas class="secmark" data-mark="rings"></canvas>
-      <span class="lbl">Review · edits made while you were away</span>
+      <canvas class="secmark" data-mark="rings" aria-hidden="true"></canvas>
+      <span class="lbl" id="review-lbl">Review · edits made while you were away</span>
       <span class="spacer"></span>
       <span class="tag" id="review-count"></span>
     </div>
     <div id="review"></div>
   </section>
 
-  <section class="roster">
+  <section class="roster" aria-labelledby="roster-lbl">
     <div class="sechead">
-      <canvas class="secmark" data-mark="dots"></canvas>
-      <span class="lbl">Projects</span>
-      <input class="filter" id="filter" placeholder="Filter by name or path…" autocomplete="off">
+      <canvas class="secmark" data-mark="dots" aria-hidden="true"></canvas>
+      <span class="lbl" id="roster-lbl">Projects</span>
+      <label class="vh" for="filter">Filter projects by name or path</label>
+      <input class="filter" id="filter" placeholder="Filter by name or path…  (/)" autocomplete="off">
+      <span class="tag kbdhint">↑↓ move · → actions · ↵ open</span>
       <span class="tag" id="roster-count"></span>
     </div>
-    <div id="tbl"></div>
+    <div id="tbl" class="tbl" tabindex="-1"></div>
   </section>
 
-  <section class="sched">
+  <section class="sched" aria-labelledby="sched-lbl">
     <div class="sechead">
-      <canvas class="secmark" data-mark="hatch"></canvas>
-      <span class="lbl">Schedule · next 7 days</span>
+      <canvas class="secmark" data-mark="hatch" aria-hidden="true"></canvas>
+      <span class="lbl" id="sched-lbl">Schedule · next 7 days</span>
       <span class="spacer"></span>
       <span class="tag" id="sched-count"></span>
     </div>
     <div id="sched"></div>
   </section>
 
-  <section class="panels" id="panels"></section>
+  <section class="panels" id="panels" aria-label="Summary"></section>
   <section id="adoptable" style="padding-top:var(--s6)"></section>
   <footer class="foot" id="foot"></footer>
 </main>
 
-<dialog class="sheet" id="dlg-new">
-  <h2>New project</h2>
-  <p class="sub">Scaffolds the folder, writes a brief the agent works from, loads its agenda, then opens your harness with a starter prompt.</p>
-  <label class="field"><span>Name</span><input id="new-name" placeholder="Cooking notebook" autocomplete="off"></label>
-  <div class="tpl" id="new-templates"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<dialog class="sheet" id="dlg-new" aria-labelledby="new-h">
+  <h2 id="new-h">New project</h2>
+  <p class="sub">Scaffolds the folder, writes a brief the agent works from, loads its agenda,
+    then opens your harness with a starter prompt.</p>
+
+  <label class="field"><span>Name</span>
+    <input id="new-name" placeholder="Cooking notebook" autocomplete="off"></label>
+
+  <fieldset class="fieldset">
+    <legend>Starts from</legend>
+    <div class="tpl" id="new-templates" role="radiogroup" aria-label="Project template"></div>
+  </fieldset>
+
   <label class="field"><span>Harness</span><select id="new-harness"></select></label>
   <p class="hint-line" id="harness-hint"></p>
+
   <label class="field"><span>Autonomy</span>
     <select id="new-autonomy">
       <option value="read" selected>read — scheduled runs may look and report, never edit</option>
@@ -78,22 +105,34 @@
       <option value="off">off — nothing runs unattended</option>
     </select>
   </label>
+
   <p class="path-preview" id="new-path"></p>
-  <div class="row end"><button class="btn" data-close>Cancel</button>
-    <button class="btn solid" id="new-create">Create &amp; open</button></div>
+  <div class="row end">
+    <button class="btn" type="button" data-close>Cancel</button>
+    <button class="btn solid" type="button" id="new-create">Create &amp; open</button>
+  </div>
 </dialog>
 
-<dialog class="palette" id="dlg-palette">
-  <input id="pal-input" placeholder="Jump to a session, run a task, start something new…" autocomplete="off">
-  <div class="pal-list" id="pal-list"></div>
+<dialog class="palette" id="dlg-palette" aria-label="Search and commands">
+  <input id="pal-input" placeholder="Jump to a session, run a task, start something new…"
+         autocomplete="off" role="combobox" aria-expanded="true" aria-controls="pal-list">
+  <div class="pal-list" id="pal-list" role="listbox" aria-label="Results"></div>
+  <div class="pal-foot">
+    <span>↑↓ move</span><span>↵ open</span><span>esc close</span>
+    <span class="spacer"></span><span id="pal-hint-mod">⌘K</span>
+  </div>
 </dialog>
 
-<dialog class="sheet" id="dlg-run">
-  <h2>Run now</h2>
+<dialog class="sheet" id="dlg-run" aria-labelledby="run-h">
+  <h2 id="run-h">Run now</h2>
   <p class="sub" id="run-sub"></p>
-  <label class="field"><span>What should it do?</span><textarea id="run-prompt" rows="5" placeholder="Check for anything new and summarise what changed."></textarea></label>
-  <div class="row end"><button class="btn" data-close>Cancel</button>
-    <button class="btn solid" id="run-go">Run headless</button></div>
+  <label class="field"><span>What should it do?</span>
+    <textarea id="run-prompt" rows="5"
+      placeholder="Check for anything new and summarise what changed."></textarea></label>
+  <div class="row end">
+    <button class="btn" type="button" data-close>Cancel</button>
+    <button class="btn solid" type="button" id="run-go">Run headless</button>
+  </div>
 </dialog>
 
 <script type="module" src="/app.js"></script>

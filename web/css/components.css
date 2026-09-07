@@ -1,0 +1,122 @@
+/* Reusable pieces. The governing change from the first pass: nothing that can
+   be clicked is invisible until you hover it. A control at rest still shows a
+   hairline, so the page teaches its own vocabulary on first look. */
+
+/* ----------------------------------------------------------------- buttons */
+.btn{appearance:none;border:1px solid var(--line);background:transparent;color:var(--ink-2);
+  border-radius:var(--r);padding:6px 11px;font:inherit;font-size:var(--t-num);cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  transition:color .14s,background .14s,border-color .14s}
+.btn:hover{color:var(--ink);background:var(--tint-2);border-color:var(--line-2)}
+.btn.solid{border-color:var(--line-2);color:var(--ink);background:var(--tint)}
+.btn.solid:hover{border-color:var(--ink-4);background:var(--tint-2)}
+/* the one destructive control on the page reads as such before it is clicked */
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 38%,transparent)}
+.btn.danger:hover{color:var(--bad);border-color:var(--bad);background:transparent}
+.btn.quiet{border-color:transparent;color:var(--ink-4)}
+.btn.quiet:hover{color:var(--ink);border-color:var(--line)}
+.btn.icon{padding:6px;width:30px;justify-content:center}
+.btn.sm{padding:3px 8px;font-size:var(--t-micro)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+kbd{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-4);letter-spacing:.02em}
+
+/* ------------------------------------------------------------------- chips */
+/* The state counts. They are filters, so they look like filters. */
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{appearance:none;cursor:pointer;font:inherit;border:1px solid var(--line);
+  background:transparent;border-radius:999px;padding:4px 12px 4px 10px;
+  display:inline-flex;align-items:center;gap:7px;transition:.14s;color:var(--ink-3)}
+.chip:hover{border-color:var(--line-2);color:var(--ink-2);background:var(--tint)}
+.chip .n{font-size:var(--t-label);letter-spacing:.08em;text-transform:uppercase;font-weight:500}
+.chip .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:var(--t-num);
+  color:var(--ink)}
+.chip.zero{color:var(--ink-4)}
+.chip.zero .v{color:var(--ink-4)}
+.chip[aria-pressed=true]{border-color:var(--ink-4);background:var(--tint-2);color:var(--ink)}
+.chip.hot{border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.chip.hot .v{color:var(--bad)}
+.chip .x{color:var(--ink-4);font-size:var(--t-micro)}
+
+/* ------------------------------------------------------------------- warn */
+.warn{display:flex;gap:var(--s3);align-items:flex-start;border:1px solid
+  color-mix(in srgb,var(--bad) 40%,transparent);border-left-width:2px;border-radius:var(--r);
+  color:var(--ink);padding:var(--s3) var(--s4);margin-top:var(--s4);font-size:var(--t-num);
+  line-height:1.55}
+.warn .ico{color:var(--bad);font-family:var(--mono);flex:none;line-height:1.55}
+.warn .msg{flex:1}
+.warn .fix{display:flex;gap:6px;flex-wrap:wrap;margin-top:var(--s2)}
+.warn code{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-2);
+  border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+
+/* ---------------------------------------------------------------- overlays */
+dialog{border:none;padding:0;background:transparent;color:inherit;max-width:100vw}
+dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
+:root[data-theme="light"] dialog::backdrop{background:rgba(40,38,34,.35)}
+.sheet{border:1px solid var(--line);border-radius:12px;background:var(--sheet);
+  padding:var(--s5);width:min(560px,94vw);max-height:88vh;overflow-y:auto;box-shadow:var(--shadow)}
+.sheet h2{margin:0 0 var(--s1);font-size:19px;font-weight:400;letter-spacing:-.022em;
+  font-family:var(--body)}
+.sheet .sub{margin:0 0 var(--s5);color:var(--ink-3);font-size:var(--t-num);line-height:1.6}
+
+.field{display:block;margin-bottom:var(--s4)}
+.field > span,.fieldset > legend{display:block;font-family:var(--display);font-size:var(--t-label);
+  letter-spacing:var(--track);text-transform:uppercase;color:var(--ink-3);margin-bottom:7px;
+  font-weight:500;padding:0}
+.field input,.field select,.field textarea{width:100%;background:transparent;
+  border:1px solid var(--line-2);border-radius:var(--r);padding:9px 11px;color:var(--ink);
+  font:inherit;font-size:13px;resize:vertical}
+.field input:hover,.field select:hover,.field textarea:hover{border-color:var(--ink-4)}
+.fieldset{border:none;padding:0;margin:0 0 var(--s4)}
+
+/* template picker — a radio group, not a row of toggles */
+.tpl{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.tpl button{border:1px solid var(--line);background:transparent;padding:11px;cursor:pointer;
+  color:var(--ink);font:inherit;text-align:left;border-radius:var(--r);transition:.13s;
+  display:flex;flex-direction:column;gap:3px}
+.tpl button:hover{border-color:var(--line-2);background:var(--tint)}
+.tpl button[aria-checked=true]{border-color:var(--ink-4);background:var(--tint-2);
+  box-shadow:inset 0 0 0 1px var(--ink-4)}
+.tpl .l{font-weight:500;font-size:var(--t-num)}
+.tpl .b{font-size:var(--t-micro);color:var(--ink-3);line-height:1.45}
+
+.path-preview{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-4);
+  margin:0 0 var(--s4);word-break:break-all;min-height:16px}
+.hint-line{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-4);
+  margin:-10px 0 var(--s4);line-height:1.55}
+.row{display:flex;gap:var(--s2)}
+.row.end{justify-content:flex-end;align-items:center}
+
+/* ----------------------------------------------------------------- palette */
+.palette{border:1px solid var(--line);border-radius:12px;background:var(--sheet);
+  width:min(620px,94vw);box-shadow:var(--shadow);overflow:hidden;padding:0;margin-top:9vh}
+.palette input{width:100%;border:none;border-bottom:1px solid var(--line);background:transparent;
+  padding:16px 18px;color:var(--ink);font:inherit;font-size:15px}
+.palette input:focus{outline:none;border-bottom-color:var(--ink-4)}
+.pal-list{max-height:min(430px,60vh);overflow-y:auto;padding:5px}
+.pal-group{font-family:var(--display);font-size:var(--t-label);letter-spacing:var(--track);
+  text-transform:uppercase;color:var(--ink-4);font-weight:500;padding:10px 13px 5px}
+.pal-item{display:flex;gap:11px;align-items:center;padding:8px 13px;border-radius:6px;
+  cursor:pointer;border:1px solid transparent}
+.pal-item:hover{background:var(--tint)}
+.pal-item[aria-selected=true]{background:var(--tint-2);border-color:var(--line-2)}
+.pal-item .ptxt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:13px;color:var(--ink-2)}
+.pal-item[aria-selected=true] .ptxt,.pal-item.hot .ptxt{color:var(--ink)}
+.pal-item .kind{font-family:var(--display);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-4);font-weight:500}
+.pal-item .ic{width:13px;text-align:center;color:var(--ink-4);font-size:var(--t-micro);flex:none}
+.pal-item.hot .ic{color:var(--bad)}
+.pal-foot{border-top:1px solid var(--line);padding:8px 14px;display:flex;gap:var(--s4);
+  font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-4)}
+.pal-none{padding:var(--s5) 14px;color:var(--ink-3);font-size:var(--t-num)}
+
+/* ------------------------------------------------------------------ toasts */
+.toasts{position:fixed;bottom:var(--s5);left:50%;transform:translateX(-50%);z-index:60;
+  display:flex;flex-direction:column;gap:var(--s2);align-items:center;pointer-events:none}
+.toast{background:var(--sheet);border:1px solid var(--line-2);border-radius:var(--r);
+  padding:10px 12px 10px 16px;font-size:var(--t-num);box-shadow:var(--shadow);
+  max-width:min(560px,92vw);display:flex;gap:var(--s3);align-items:center;pointer-events:auto}
+/* errors stay until dismissed — an auto-hiding error is an unread error */
+.toast.bad{border-color:var(--bad)}
+.toast.bad .tmsg{color:var(--bad)}
+.toast .tmsg{flex:1}
