@@ -11,6 +11,7 @@ import * as deep from '../src/deeplink.js';
 import { setToken, clearToken, hasToken, storedHarnesses, credentialsPath, tokenVarFor } from '../src/credentials.js';
 import { preflight, authBlocker, tokenAdvice } from '../src/preflight.js';
 import * as service from '../src/service.js';
+import * as july from '../src/july.js';
 
 const C = {
   dim: (s) => `\x1b[2m${s}\x1b[0m`, b: (s) => `\x1b[1m${s}\x1b[0m`,
@@ -57,6 +58,7 @@ function startScheduler(server) {
   setTimeout(() => { beat(); setInterval(beat, 60_000); }, 60_000 - (Date.now() % 60_000));
 }
 
+await (async () => {
 switch (cmd) {
   case 'up':
   case 'serve': {
@@ -291,6 +293,44 @@ switch (cmd) {
     break;
   }
 
+  case 'july': {
+    const sub = args[1] || 'run';
+    const js = july.julySettings();
+    if (sub === 'pair') {
+      const access = july.dbAccess();
+      if (!access.ok) { console.error(`\n  ${C.r('!')} ${access.why}\n`); process.exit(1); }
+      console.log(`\n  Text yourself the single word ${C.b('july')} from your phone (or Messages on this Mac), then press Enter.\n  ${C.dim('The chat that text arrives in becomes July\'s handle.')}`);
+      await new Promise((r) => process.stdin.once('data', r));
+      const handle = july.pair();
+      if (!handle) { console.error(C.r('  no "july" text in the last five minutes — send it and try again')); process.exit(1); }
+      saveSettings({ july: { ...(getSettings().july || {}), handle } });
+      console.log(`  ${C.g('✓')} paired with ${C.b(handle)}\n  ${C.dim('Now: sundust july test, then sundust july')}\n`);
+      break;
+    }
+    if (sub === 'test') {
+      if (!js.handle) { console.error('  not paired — sundust july pair'); process.exit(1); }
+      try { await july.send(js.handle, 'Hello — July here. Text me anything about your projects.', js); console.log(`  ${C.g('✓')} sent to ${js.handle} ${C.dim('(macOS may have asked to allow Messages automation)')}`); }
+      catch (e) { console.error(C.r(`  ${e.message}`)); process.exit(1); }
+      break;
+    }
+    if (sub === 'status') {
+      const st = july.loadState(); const access = july.dbAccess();
+      console.log(`  handle    ${js.handle || C.dim('not paired')}\n  model     ${js.model}\n  messages  ${access.ok ? C.g('readable') : C.r(access.why)}\n  memory    ${st.sessionId ? `${st.turns} turns in the current conversation` : 'none yet'}\n  watching  ${Object.keys(st.watching || {}).length} runs · notified ${Object.keys(st.notified || {}).length}`);
+      break;
+    }
+    if (sub === 'model' && args[2]) {
+      saveSettings({ july: { ...(getSettings().july || {}), model: args[2] } });
+      console.log(`  ${C.g('✓')} July uses ${args[2]}`); break;
+    }
+    if (sub === 'run' || sub === 'up') {
+      try { await july.run({ log: (l) => console.log(C.dim(`[${new Date().toLocaleTimeString()}]`), l) }); }
+      catch (e) { console.error(`\n  ${C.r('!')} ${e.message}\n`); process.exit(1); }
+      break;
+    }
+    console.log(`  sundust july            listen and act (needs \`sundust up\` running)\n  sundust july pair       text yourself "july" to set the handle\n  sundust july test       send a hello\n  sundust july status\n  sundust july model <m>  e.g. haiku, sonnet`);
+    break;
+  }
+
   case 'install': {
     try {
       const { plist, log } = service.install({ port: flag('port', null) });
@@ -333,6 +373,7 @@ switch (cmd) {
     ${C.b('install')}            run at login and restart if it dies (launchd)
                        ${C.dim('--port N · then `sundust service` and `sundust logs`')}
     ${C.b('uninstall')}          remove the login service
+    ${C.b('july')}               the secretary you text: pair · test · status · model
     ${C.b('remote')} setup       serve over your tailnet and allow its name (needs Tailscale)
     ${C.b('remote')} add <host>  let a tailnet or tunnel hostname reach the console
 
@@ -349,3 +390,4 @@ switch (cmd) {
     ${C.b('run')} <match> [task] run an agenda task now, headless
 `);
 }
+})();

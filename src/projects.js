@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { REGISTRY, HOME, readJSON, writeJSON, getSettings } from './config.js';
+import { REGISTRY, HOME, readJSON, writeJSON, getSettings, SUNDUST_DIR } from './config.js';
 import { TEMPLATES } from './templates.js';
 import { DEFAULT_HARNESS } from './harnesses.js';
 
@@ -94,6 +94,8 @@ const isScratch = (p) => !p || p.startsWith(CLAUDE_SCRATCH) || p.includes('/scra
  * UI as one-click adopts, so an existing repo joins Sundust without any setup.
  */
 export function discoverCandidates(sessions) {
+  // sessions July runs for itself live under ~/.sundust and are not a project
+  sessions = sessions.filter((x) => !String(x.cwd || '').startsWith(SUNDUST_DIR));
   const known = new Set(
     loadProjects().flatMap((p) => [p.path, ...(p.aliases || [])].map((d) => path.resolve(d)))
   );

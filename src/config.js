@@ -40,6 +40,14 @@ export const DEFAULT_SETTINGS = {
     pauseAllAbove: 93,       // only critical tasks run above this
     deferWhenBusy: true,     // back-pressure: your own session comes first
     busyThreshold: 40        // 5-hour percentage that counts as "you are working"
+  },
+  // July, the secretary you text. Paired with `sundust july pair`.
+  july: {
+    handle: null,            // the phone number or Apple ID you text yourself at
+    model: 'haiku',          // any alias or model id the claude CLI accepts
+    pollMs: 3000,
+    stateMs: 30000,
+    maxTurns: 40             // fresh conversation after this many exchanges
   }
 };
 

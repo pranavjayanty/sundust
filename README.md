@@ -123,6 +123,36 @@ Anything held back is listed under the schedule with the reason.
 
 **Claude Code's own scheduled tasks** (`~/.claude/scheduled-tasks`) are shown in the agenda with a `claude` badge. Sundust does not run them; the desktop app does.
 
+## July: the secretary you text
+
+July is an agent you talk to over iMessage. Text yourself, and July answers with what it knows about your projects and sessions, does what you ask, and texts you first when something needs you.
+
+What July can do:
+
+- Answer questions. "What is Ledger doing?" "Anything waiting on me?" "What did the last run in Malagir say?"
+- Ping you. When a run stops on a question, a session is waiting at a prompt, or a run fails, July texts you the question and the context the agent had. Reply in plain English and July sends your answer back to that run, which carries on headless.
+- Act. Continue any session with a message, run an agenda task or a one-off prompt, pause or resume the fleet, open a session in the app on the Mac. Each action is validated against what July was shown; it cannot run shell commands, touch files, or invent an id.
+- Follow up. When a run July started finishes, it texts you the result.
+
+July runs on a cheap model (Haiku by default) through the Claude Code CLI, so it costs plan usage and needs no API key. It keeps one conversation going so it remembers context, and starts a fresh one after 40 exchanges.
+
+Setup, on the Mac:
+
+1. Grant Full Disk Access to the app you run Sundust from (System Settings, Privacy & Security, Full Disk Access, add Terminal or iTerm). July reads the Messages database and macOS does not allow that otherwise.
+2. Pair. Run `sundust july pair`, then text yourself the word `july` from your phone. The chat that text arrives in becomes July's handle.
+3. `sundust july test` sends a hello. macOS asks once to allow Sundust to control Messages.
+4. `sundust july` starts listening. It needs `sundust up` running.
+
+```bash
+sundust july pair
+sundust july test
+sundust july
+sundust july status
+sundust july model sonnet   # if Haiku is not enough
+```
+
+Only texts from the paired handle are read, and only ones sent after July started. July's own texts begin with ☀︎ so it never replies to itself.
+
 ## From your phone
 
 Nothing has to move. The Mac keeps running everything; the phone is a remote control. Everything headless works remotely: answering, continuing sessions, editing and running the agenda, reviewing edits, pausing the fleet. Only the buttons that open the desktop app are Mac-only, and the console labels them "on Mac" when you are remote.
@@ -162,7 +192,8 @@ State lives in `~/.sundust`. Nothing in `~/.claude` is ever written to.
 | File | Contents |
 |---|---|
 | `projects.json` | The projects you track, their agendas and settings |
-| `settings.json` | Port, workspace root, concurrency, timeouts, budget thresholds, remote hosts |
+| `settings.json` | Port, workspace root, concurrency, timeouts, budget thresholds, remote hosts, July |
+| `july.json` | July's conversation id, message cursor, and what it has already pinged you about |
 | `runs/` | One JSON record per unattended run |
 | `notes/` | Per-project notes written by runs |
 | `asks.json` | Open and answered questions |
@@ -189,6 +220,7 @@ Set `SUNDUST_HOME` to use a different directory.
 | `sundust run <match> [prompt]` | Run an agenda task, or a prompt, headless now |
 | `sundust auth` | Store a long-lived token |
 | `sundust remote setup` / `add` / `remove` | Reach the console from other devices |
+| `sundust july` / `pair` / `test` / `status` / `model` | The secretary you text |
 
 Templates: `blank`, `finance`, `recipes`, `fitness`, `journal`. Each one scaffolds a folder, a `CLAUDE.md` brief, and an agenda that starts running on its own.
 
@@ -215,6 +247,7 @@ src/scan.js        incremental transcript indexer and live-process detection
 src/projects.js    registry, scaffolding, relocation, discovery
 src/harnesses.js   harness definitions
 src/service.js     launchd login service, Tailscale
+src/july.js        the secretary: Messages reader, digest, actions, loop
 src/templates.js   project templates
 web/               the console: vanilla ES modules, no build step
 test/              node:test suites
