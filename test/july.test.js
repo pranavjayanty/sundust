@@ -44,9 +44,42 @@ test('reads texts from the fixture, including ones stored only in attributedBody
   assert.equal(july.latestRowId(db), 13);
 });
 
-test('pairing picks the chat where "july" was just texted', () => {
+test('iMessage pairing picks the chat where "july" was just texted', () => {
   const db = fixtureDb();
-  assert.equal(july.pair({ db }), '+15550001111');
+  assert.equal(july.pairIMessage({ db }), '+15550001111');
+});
+
+test('Telegram updates become plain messages, and pairing picks the newest "july" or /start', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const updates = [
+    { update_id: 100, message: { message_id: 1, date: now - 400, chat: { id: 42 }, from: { id: 42, first_name: 'Pranav' }, text: 'july' } },
+    { update_id: 101, message: { message_id: 2, date: now - 20, chat: { id: 42 }, from: { id: 42, first_name: 'Pranav', last_name: 'J' }, text: '/start' } },
+    { update_id: 102, message: { message_id: 3, date: now - 10, chat: { id: 77 }, from: { id: 77, username: 'stranger' }, text: 'hi' } },
+    { update_id: 103, message: { message_id: 4, date: now - 5, chat: { id: 42 }, from: { id: 42 }, sticker: {} } }
+  ];
+  const msgs = july.fromUpdates(updates);
+  assert.deepEqual(msgs.map((m) => [m.id, m.from, m.text]), [[100, '42', 'july'], [101, '42', '/start'], [102, '77', 'hi']], 'stickers and non-text are dropped');
+  const hit = july.pickPairing(msgs);
+  assert.equal(hit.id, 101, 'the newest pairing word wins, not the stale one');
+  assert.equal(hit.name, 'Pranav J');
+  assert.equal(july.pickPairing([{ id: 1, text: 'july', at: Date.now() - 10 * 60000, from: '1' }]), null, 'too old');
+  assert.equal(july.telegram.isMine({ from: '77' }, { telegram: { chatId: 42 } }), false, 'a stranger who finds the bot is ignored');
+  assert.equal(july.telegram.isMine({ from: '42' }, { telegram: { chatId: 42 } }), true);
+});
+
+test('long replies are split under Telegram’s limit on line breaks', () => {
+  const parts = july.chunk(Array.from({ length: 300 }, (_, i) => `line ${i} ${'x'.repeat(20)}`).join('\n'), 1000);
+  assert.ok(parts.length > 1);
+  assert.ok(parts.every((p) => p.length <= 1000));
+  assert.equal(parts.join('\n').split('\n').length, 300, 'no line is lost');
+  assert.deepEqual(july.chunk('short'), ['short']);
+});
+
+test('readiness names the missing piece per channel', () => {
+  const t = july.telegram.ready({ telegram: null });
+  assert.equal(t.ok, false); assert.match(t.why, /bot token|paired/);
+  const i = july.imessage.ready({ handle: null });
+  assert.equal(i.ok, false); assert.match(i.why, /not paired/);
 });
 
 test('extractText handles short, 2-byte and 4-byte lengths', () => {

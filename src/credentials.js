@@ -48,6 +48,8 @@ export function clearToken(harnessId) {
 }
 
 export const hasToken = (harnessId) => Boolean(readAll()[harnessId]);
+/** The stored token itself, for callers that talk to a service directly (July's bot token). */
+export const getToken = (id) => readAll()[id] || null;
 export const storedHarnesses = () => Object.keys(readAll());
 
 /**

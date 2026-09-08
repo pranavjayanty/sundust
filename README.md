@@ -16,6 +16,7 @@ Sundust watches every project you work on with a coding agent, shows you what ne
 - **Spends your plan carefully.** The scheduler reads your Claude usage before starting anything, holds low-priority tasks as the weekly window fills, and waits while you are actively working.
 - **Connects projects.** A run can raise an event. Projects that listen for that event get a run of their own, with the context.
 - **Works from your phone.** Serve it over Tailscale, add it to your home screen, and do everything except open the desktop app.
+- **Has a secretary you can message.** July is a Telegram bot on a cheap model: ask it what is going on, tell it what to do, and it messages you first when something needs you.
 
 ## Requirements
 
@@ -123,53 +124,45 @@ Anything held back is listed under the schedule with the reason.
 
 **Claude Code's own scheduled tasks** (`~/.claude/scheduled-tasks`) are shown in the agenda with a `claude` badge. Sundust does not run them; the desktop app does.
 
-## July: the secretary you text
+## July: the secretary you message
 
-July is an agent you talk to over iMessage. Text yourself, and July answers with what it knows about your projects and sessions, does what you ask, and texts you first when something needs you.
+July is an agent you talk to in Telegram. Message it and July answers with what it knows about your projects and sessions, does what you ask, and messages you first when something needs you.
 
 What July can do:
 
 - Answer questions. "What is Ledger doing?" "Anything waiting on me?" "What did the last run in Malagir say?"
-- Ping you. When a run stops on a question, a session is waiting at a prompt, or a run fails, July texts you the question and the context the agent had. Reply in plain English and July sends your answer back to that run, which carries on headless.
+- Ping you. When a run stops on a question, a session is waiting at a prompt, or a run fails, July sends you the question and the context the agent had. Reply in plain English and July sends your answer back to that run, which carries on headless.
 - Act. Continue any session with a message, run an agenda task or a one-off prompt, pause or resume the fleet, open a session in the app on the Mac. Each action is validated against what July was shown; it cannot run shell commands, touch files, or invent an id.
-- Follow up. When a run July started finishes, it texts you the result.
+- Follow up. When a run July started finishes, it messages you the result.
 
-July runs on a cheap model (Haiku by default) through the Claude Code CLI, so it costs plan usage and needs no API key. It keeps one conversation going so it remembers context, and starts a fresh one after 40 exchanges.
+July runs on a cheap model (Haiku by default) through the Claude Code CLI, so it costs plan usage and needs no API key. It keeps one conversation going so it remembers context, and starts a fresh one after 40 exchanges. Only the one Telegram chat you paired can talk to it; anyone else who finds the bot is ignored.
 
-**Give July a name in Messages.** July answers from one of your own iMessage addresses, so the thread can be with a contact called July rather than with yourself. Any address your account can receive at works: your Apple ID email, or a dedicated iCloud alias (iCloud settings, Mail, Add alias; then on the iPhone, Settings, Messages, Send & Receive, turn it on). Then:
+Setup, about five minutes:
 
-```bash
-sundust july contact july.you@icloud.com     # writes a contact card with the sun as its photo and opens it in Contacts
-```
-
-Add the card. If that address is also on your own "Me" card in Contacts, remove it there, or the thread will keep your name. Texting July is still texting your own account, so nothing leaves your devices.
-
-Setup, on the Mac:
-
-1. Grant Full Disk Access to the app you run Sundust from (System Settings, Privacy & Security, Full Disk Access, add Terminal or iTerm). July reads the Messages database and macOS does not allow that otherwise.
-2. Pair. Run `sundust july pair`, then text July (or yourself) the word `july` from your phone. The chat that text arrives in becomes July's handle.
-3. `sundust july test` sends a hello. macOS asks once to allow Sundust to control Messages.
-4. `sundust july` starts listening. It needs `sundust up` running.
-
-```bash
-sundust july pair
-sundust july test
-sundust july
-sundust july status
-sundust july model sonnet   # if Haiku is not enough
-```
+1. In Telegram, message **@BotFather**, send `/newbot`, name it July, pick a username such as `yourname_july_bot`, and copy the token.
+2. On the Mac:
+   ```bash
+   sundust july telegram <token>     # stores the token (mode 600) and prints the bot's link
+   ```
+3. Open that link in Telegram and send the bot the word `july`. Then:
+   ```bash
+   sundust july pair                 # binds your chat; nobody else can use the bot
+   sundust july test                 # July says hello
+   sundust july                      # listen and act (needs sundust up running)
+   ```
 
 To keep July running after you close the terminal:
 
 ```bash
 sundust july install        # launchd agent: starts at login, restarts if it stops
 sundust july logs
+sundust july status
 sundust july uninstall
 ```
 
-Under launchd, July runs as the node binary rather than your terminal, so that binary needs Full Disk Access too. `sundust july install` prints the exact path; in the Full Disk Access file dialog press ⌘⇧G and paste it. Until it is granted, or until you pair, the service waits and says why in its log instead of failing.
+The bot talks to Telegram by long polling, so nothing is exposed on your network and no public URL is needed. `sundust july model sonnet` if Haiku is not enough.
 
-Only texts from the paired handle are read, and only ones sent after July started. July's own texts begin with ☀︎ so it never replies to itself.
+**iMessage instead of Telegram.** `sundust july channel imessage` switches July to your own Messages account: it reads the Messages database (Full Disk Access required for the terminal, and for the node binary under launchd) and sends through Messages. Pair by texting the word `july` to yourself or to a contact card made with `sundust july contact <address>`. The limitation is structural: a Mac can only send from the account it is signed into, so July's texts appear as sent by you and do not notify you. It works for asking questions; Telegram is the better fit for pings.
 
 ## From your phone
 
@@ -216,7 +209,7 @@ State lives in `~/.sundust`. Nothing in `~/.claude` is ever written to.
 | `notes/` | Per-project notes written by runs |
 | `asks.json` | Open and answered questions |
 | `events.jsonl` | Cross-project events |
-| `credentials.json` | The long-lived token from `sundust auth`, mode 600 |
+| `credentials.json` | The long-lived token from `sundust auth` and July's bot token, mode 600 |
 | `log/` | Output of the login services (`sundust.log`, `july.log`) |
 
 Set `SUNDUST_HOME` to use a different directory.
@@ -238,7 +231,7 @@ Set `SUNDUST_HOME` to use a different directory.
 | `sundust run <match> [prompt]` | Run an agenda task, or a prompt, headless now |
 | `sundust auth` | Store a long-lived token |
 | `sundust remote setup` / `add` / `remove` | Reach the console from other devices |
-| `sundust july` / `contact` / `pair` / `test` / `install` / `logs` / `status` / `model` | The secretary you text |
+| `sundust july` / `telegram` / `pair` / `test` / `install` / `logs` / `status` / `model` / `channel` | The secretary you message |
 
 Templates: `blank`, `finance`, `recipes`, `fitness`, `journal`. Each one scaffolds a folder, a `CLAUDE.md` brief, and an agenda that starts running on its own.
 
@@ -265,7 +258,7 @@ src/scan.js        incremental transcript indexer and live-process detection
 src/projects.js    registry, scaffolding, relocation, discovery
 src/harnesses.js   harness definitions
 src/service.js     launchd login service, Tailscale
-src/july.js        the secretary: Messages reader, digest, actions, loop
+src/july.js        the secretary: Telegram and iMessage channels, digest, actions, loop
 src/templates.js   project templates
 web/               the console: vanilla ES modules, no build step
 test/              node:test suites

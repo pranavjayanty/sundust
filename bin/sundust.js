@@ -296,46 +296,84 @@ switch (cmd) {
   case 'july': {
     const sub = args[1] || 'run';
     const js = july.julySettings();
+    const ch = july.channel(js);
+    const saveJuly = (patch) => saveSettings({ july: { ...(getSettings().july || {}), ...patch } });
+
+    if (sub === 'telegram') {
+      const token = (args[2] || '').trim();
+      if (!token) { console.error('  usage: sundust july telegram <bot token from @BotFather>'); process.exit(1); }
+      setToken('telegram', token);
+      saveJuly({ channel: 'telegram' });
+      try {
+        const me = await july.telegram.whoami();
+        console.log(`\n  ${C.g('✓')} token stored; the bot is ${C.b('@' + me.username)}\n  Open ${C.c('https://t.me/' + me.username)} in Telegram, send it the word ${C.b('july')}, then run ${C.b('sundust july pair')}.\n`);
+      } catch (e) { console.error(C.r(`  token stored but Telegram rejected it: ${e.message}`)); process.exit(1); }
+      break;
+    }
+    if (sub === 'channel') {
+      const want = args[2];
+      if (!['telegram', 'imessage'].includes(want)) { console.error('  usage: sundust july channel telegram|imessage'); process.exit(1); }
+      saveJuly({ channel: want });
+      console.log(`  ${C.g('✓')} July talks over ${want}`);
+      break;
+    }
     if (sub === 'contact') {
       const address = (args[2] || '').trim();
-      if (!address) { console.error('  usage: sundust july contact <email-or-number>   (an iMessage address of yours that July will answer from)'); process.exit(1); }
+      if (!address) { console.error('  usage: sundust july contact <email-or-number>   (iMessage only)'); process.exit(1); }
       const photo = await july.renderPhoto().catch(() => null);
       const file = path.join(SUNDUST_DIR, 'July.vcf');
       fs.writeFileSync(file, july.contactCard({ address, photoBase64: photo }));
       exec(`open "${file}"`);
-      console.log(`\n  ${C.g('✓')} contact card written to ${file} and opened in Contacts — add it${photo ? '' : C.dim(' (no photo: Chrome not found to draw it)')}.\n  Then text ${C.b('July')} the word ${C.b('july')} and run ${C.b('sundust july pair')}.\n`);
+      console.log(`\n  ${C.g('✓')} contact card written to ${file} and opened in Contacts — add it.\n`);
       break;
     }
     if (sub === 'pair') {
+      if (ch.id === 'telegram') {
+        if (!hasToken('telegram')) { console.error(`\n  ${C.r('!')} no bot token yet — sundust july telegram <token>\n`); process.exit(1); }
+        let who = null;
+        try { who = await july.telegram.whoami(); } catch (e) { console.error(C.r(`  ${e.message}`)); process.exit(1); }
+        console.log(`\n  Open ${C.c('https://t.me/' + who.username)} and send it the word ${C.b('july')}. Waiting up to two minutes…`);
+        let cursor = null, hit = null;
+        for (let i = 0; i < 40 && !hit; i++) {
+          const r = await july.telegram.pair(cursor).catch((e) => { console.error(C.dim(`  ${e.message}`)); return { cursor }; });
+          cursor = r.cursor;
+          if (r.chatId) hit = r;
+        }
+        if (!hit) { console.error(C.r('  nothing arrived — send "july" to the bot and run this again')); process.exit(1); }
+        saveJuly({ channel: 'telegram', telegram: { chatId: hit.chatId, name: hit.name } });
+        const st = july.loadState(); st.cursor = hit.cursor; st.channel = 'telegram'; july.saveState(st);
+        console.log(`  ${C.g('✓')} paired with ${C.b(hit.name)} ${C.dim(`(chat ${hit.chatId})`)} — only that chat can talk to July\n  ${C.dim('Now: sundust july test, then sundust july (or the service picks it up within 30s)')}\n`);
+        break;
+      }
       const access = july.dbAccess();
       if (!access.ok) { console.error(`\n  ${C.r('!')} ${access.why}\n`); process.exit(1); }
-      console.log(`\n  Text ${C.b('July')} (the contact) — or yourself — the single word ${C.b('july')} from your phone, then press Enter.\n  ${C.dim('The chat that text arrives in becomes July\'s handle.')}`);
+      console.log(`\n  Text ${C.b('July')} (the contact) — or yourself — the single word ${C.b('july')}, then press Enter.`);
       await new Promise((r) => process.stdin.once('data', r));
-      const handle = july.pair();
+      const handle = july.pairIMessage();
       if (!handle) { console.error(C.r('  no "july" text in the last five minutes — send it and try again')); process.exit(1); }
-      saveSettings({ july: { ...(getSettings().july || {}), handle } });
-      console.log(`  ${C.g('✓')} paired with ${C.b(handle)}\n  ${C.dim('Now: sundust july test, then sundust july')}\n`);
+      saveJuly({ channel: 'imessage', handle });
+      console.log(`  ${C.g('✓')} paired with ${C.b(handle)}\n`);
       break;
     }
     if (sub === 'test') {
-      if (!js.handle) { console.error('  not paired — sundust july pair'); process.exit(1); }
-      try { await july.send(js.handle, 'Hello — July here. Text me anything about your projects.', js); console.log(`  ${C.g('✓')} sent to ${js.handle} ${C.dim('(macOS may have asked to allow Messages automation)')}`); }
+      const check = ch.ready(js);
+      if (!check.ok) { console.error(`\n  ${C.r('!')} ${check.why}\n`); process.exit(1); }
+      try { await ch.send('Hello — July here. Message me anything about your projects.', js); console.log(`  ${C.g('✓')} sent over ${ch.label}`); }
       catch (e) { console.error(C.r(`  ${e.message}`)); process.exit(1); }
       break;
     }
     if (sub === 'status') {
-      const st = july.loadState(); const access = july.dbAccess(); const ag = service.julyStatus();
+      const st = july.loadState(); const ag = service.julyStatus(); const check = ch.ready(js);
       const svc = !ag.supported ? C.dim('n/a') : ag.installed ? (ag.running ? C.g(`running (pid ${ag.pid})`) : C.y('installed, not running')) : C.dim('not installed — sundust july install');
-      console.log(`  handle    ${js.handle || C.dim('not paired')}\n  model     ${js.model}\n  messages  ${access.ok ? C.g('readable') : C.r(access.why)}\n  service   ${svc}\n  memory    ${st.sessionId ? `${st.turns} turns in the current conversation` : 'none yet'}\n  watching  ${Object.keys(st.watching || {}).length} runs · notified ${Object.keys(st.notified || {}).length}`);
+      const who = ch.id === 'telegram' ? (js.telegram?.name ? `${js.telegram.name} (chat ${js.telegram.chatId})` : C.dim('not paired')) : (js.handle || C.dim('not paired'));
+      console.log(`  channel   ${ch.label}\n  paired    ${who}\n  model     ${js.model}\n  ready     ${check.ok ? C.g('yes') : C.r(check.why)}\n  service   ${svc}\n  memory    ${st.sessionId ? `${st.turns} turns in the current conversation` : 'none yet'}\n  watching  ${Object.keys(st.watching || {}).length} runs · notified ${Object.keys(st.notified || {}).length}`);
       break;
     }
     if (sub === 'install') {
       try {
         const { plist, log } = service.installJuly();
-        const node = service.nodeBinary();
-        console.log(`\n  ${C.g('✓')} July now starts at login and restarts if it stops.`);
-        console.log(C.dim(`    agent   ${plist}\n    log     ${log}\n`));
-        console.log(`  Under launchd, July runs as ${C.b(node)}.\n  Give ${C.b('that file')} Full Disk Access: System Settings → Privacy & Security → Full Disk Access → “+”,\n  press ${C.b('⌘⇧G')} in the file dialog and paste the path above. Until then July waits and says so in its log.\n`);
+        console.log(`\n  ${C.g('✓')} July now starts at login and restarts if it stops.\n${C.dim(`    agent   ${plist}\n    log     ${log}`)}\n`);
+        if (ch.id === 'imessage') console.log(`  Under launchd July runs as ${C.b(service.nodeBinary())}; give that file Full Disk Access for iMessage.\n`);
       } catch (e) { console.error(C.r(`  ${e.message}`)); process.exit(1); }
       break;
     }
@@ -349,17 +387,21 @@ switch (cmd) {
       console.log(out || C.dim(`  no log yet at ${service.JULY_LOG}`));
       break;
     }
-    if (sub === 'model' && args[2]) {
-      saveSettings({ july: { ...(getSettings().july || {}), model: args[2] } });
-      console.log(`  ${C.g('✓')} July uses ${args[2]}`); break;
-    }
+    if (sub === 'model' && args[2]) { saveJuly({ model: args[2] }); console.log(`  ${C.g('✓')} July uses ${args[2]}`); break; }
     if (sub === 'run' || sub === 'up') {
       try { await july.run({ log: (l) => console.log(C.dim(`[${new Date().toLocaleTimeString()}]`), l) }); }
       catch (e) { console.error(`\n  ${C.r('!')} ${e.message}\n`); process.exit(1); }
       break;
     }
-    console.log(`  sundust july            listen and act (needs \`sundust up\` running)\n  sundust july contact <address>  make a "July" contact card for one of your iMessage addresses
-  sundust july pair       text July (or yourself) "july" to set the handle\n  sundust july test       send a hello\n  sundust july install    run at login, restart if it stops (needs Full Disk Access for node)\n  sundust july uninstall\n  sundust july logs [--n 80]\n  sundust july status\n  sundust july model <m>  e.g. haiku, sonnet`);
+    console.log(`  sundust july                  listen and act (needs \`sundust up\` running)
+  sundust july telegram <token> store the bot token from @BotFather
+  sundust july pair             send the bot "july" to bind your chat
+  sundust july test             send a hello
+  sundust july install          run at login, restart if it stops
+  sundust july uninstall · logs [--n 80] · status
+  sundust july model <m>        e.g. haiku, sonnet
+  sundust july channel telegram|imessage
+  sundust july contact <addr>   iMessage: a "July" contact card`);
     break;
   }
 
@@ -405,7 +447,7 @@ switch (cmd) {
     ${C.b('install')}            run at login and restart if it dies (launchd)
                        ${C.dim('--port N · then `sundust service` and `sundust logs`')}
     ${C.b('uninstall')}          remove the login service
-    ${C.b('july')}               the secretary you text: pair · test · install · status · model
+    ${C.b('july')}               the secretary you message: telegram · pair · test · install · status
     ${C.b('remote')} setup       serve over your tailnet and allow its name (needs Tailscale)
     ${C.b('remote')} add <host>  let a tailnet or tunnel hostname reach the console
 

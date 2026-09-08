@@ -1,15 +1,21 @@
 /* July: a secretary you text.
 
-   July reads the iMessage chat you have with yourself, answers questions about
-   your projects and sessions, pings you when something needs you, and acts
-   through the same local API the console uses. July runs on a cheap model
-   through the Claude Code CLI, so it costs plan usage, not an API key.
+   July answers questions about your projects and sessions, pings you when
+   something needs you, and acts through the same local API the console uses.
+   It runs on a cheap model through the Claude Code CLI, so it costs plan
+   usage, not an API key.
 
-   Two hard limits. July only ever reads the Messages database, and only acts
-   on texts from the handle you paired. And July has no tools of its own: it
-   can emit a fixed set of actions (answer a question, continue a session, run
-   a task, pause the fleet, open something on the Mac), each validated here
-   before it touches Sundust. */
+   The channel is pluggable. Telegram is the default: a bot you create with
+   BotFather, long-polled from here, so it needs no public URL and no macOS
+   permissions, and its messages are real incoming messages with real
+   notifications. iMessage is kept as an alternative; it sends from your own
+   account, so its messages look sent by you and do not notify you.
+
+   Two hard limits hold for every channel. July only acts on messages from the
+   one chat you paired. And July has no tools of its own: it can emit a fixed
+   set of actions (answer a question, continue a session, run a task, pause the
+   fleet, open something on the Mac), each validated here before it touches
+   Sundust. */
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,32 +23,114 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 import { SUNDUST_DIR, getSettings, readJSON, writeJSON } from './config.js';
-import { envFor } from './credentials.js';
+import { envFor, getToken } from './credentials.js';
 import { getHarness } from './harnesses.js';
 
-export const CHAT_DB = path.join(os.homedir(), 'Library', 'Messages', 'chat.db');
 const STATE = path.join(SUNDUST_DIR, 'july.json');
-const SEND_SCRIPT = path.join(SUNDUST_DIR, 'july-send.applescript');
 const WORKDIR = path.join(SUNDUST_DIR, 'july');
-const APPLE_EPOCH_MS = 978307200000;   // 2001-01-01, which Messages counts from
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const DEFAULTS = {
-  handle: null,          // the phone number or Apple ID you text yourself at
+  channel: 'telegram',   // or 'imessage'
   model: 'haiku',        // cheap; any alias or model id the CLI accepts
-  marker: '☀︎ ',          // July's own texts start with this, so it never answers itself
-  pollMs: 3000,          // how often to look for new texts
+  pollMs: 3000,          // iMessage only: how often to look for new texts
   stateMs: 30000,        // how often to look for things that need you
-  maxTurns: 40           // start a fresh conversation after this many exchanges
+  maxTurns: 40,          // start a fresh conversation after this many exchanges
+  handle: null,          // iMessage: the address you text July at
+  telegram: null         // { chatId, name } once paired
 };
 
 export const julySettings = () => ({ ...DEFAULTS, ...(getSettings().july || {}) });
 
 export function loadState() {
-  return readJSON(STATE, { sessionId: null, turns: 0, lastRowId: 0, notified: {}, watching: {}, startedAt: 0 });
+  return readJSON(STATE, { sessionId: null, turns: 0, cursor: null, notified: {}, watching: {}, startedAt: 0 });
 }
 export const saveState = (s) => writeJSON(STATE, s);
 
-/* ----------------------------------------------------------- messages db */
+/* ============================================================== telegram */
+
+async function tg(method, body = {}, { timeoutMs = 30000 } = {}) {
+  const token = getToken('telegram');
+  if (!token) throw new Error('no Telegram bot token yet — sundust july telegram <token>');
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!j.ok) throw new Error(j.description || `Telegram ${method} failed (${r.status})`);
+    return j.result;
+  } finally { clearTimeout(t); }
+}
+
+/** Telegram updates → the plain message shape every channel produces. */
+export function fromUpdates(updates) {
+  const out = [];
+  for (const u of updates || []) {
+    const m = u.message || u.edited_message;
+    if (!m || typeof m.text !== 'string') continue;
+    const who = m.from || {};
+    out.push({ id: u.update_id, text: m.text, at: (m.date || 0) * 1000, from: String(m.chat?.id ?? who.id ?? ''),
+      name: [who.first_name, who.last_name].filter(Boolean).join(' ') || who.username || String(m.chat?.id ?? '') });
+  }
+  return out;
+}
+
+/** Telegram caps a message at 4096 characters; split on line breaks first. */
+export function chunk(text, max = 4000) {
+  const out = []; let cur = '';
+  for (const line of String(text).split('\n')) {
+    if ((cur + '\n' + line).length > max) { if (cur) out.push(cur); cur = line.slice(0, max); }
+    else cur = cur ? `${cur}\n${line}` : line;
+  }
+  if (cur) out.push(cur);
+  return out.length ? out : [''];
+}
+
+/** The newest message in the last few minutes that says "july" or /start. */
+export function pickPairing(messages, { windowMs = 5 * 60000, now = Date.now() } = {}) {
+  return messages
+    .filter((m) => /^\s*(july|\/start)\s*$/i.test(m.text) && now - m.at < windowMs)
+    .sort((a, b) => b.at - a.at || b.id - a.id)[0] || null;
+}
+
+export const telegram = {
+  id: 'telegram', label: 'Telegram', marker: '', blocking: true,
+  ready(js) {
+    if (!getToken('telegram')) return { ok: false, why: 'no Telegram bot token yet — create one with @BotFather and run `sundust july telegram <token>`' };
+    if (!js.telegram?.chatId) return { ok: false, why: 'July is not paired yet — open the bot in Telegram, send "july", and run `sundust july pair`' };
+    return { ok: true };
+  },
+  async whoami() { const me = await tg('getMe'); return { username: me.username, name: me.first_name }; },
+  /** Long-poll: waits up to 25 seconds for something new. */
+  async receive(cursor) {
+    const updates = await tg('getUpdates', { offset: cursor ?? undefined, timeout: 25, allowed_updates: ['message'] }, { timeoutMs: 40000 });
+    const messages = fromUpdates(updates);
+    const next = updates.length ? updates[updates.length - 1].update_id + 1 : cursor;
+    return { messages, cursor: next };
+  },
+  isMine(m, js) { return String(m.from) === String(js.telegram?.chatId); },
+  async send(text, js) {
+    if (!js.telegram?.chatId) throw new Error('not paired');
+    for (const part of chunk(text)) await tg('sendMessage', { chat_id: js.telegram.chatId, text: part, disable_web_page_preview: true });
+    return true;
+  },
+  async typing(js) { try { await tg('sendChatAction', { chat_id: js.telegram.chatId, action: 'typing' }, { timeoutMs: 8000 }); } catch {} },
+  /** Look for the pairing word without blocking long. Returns { chatId, name, cursor } or { cursor }. */
+  async pair(cursor) {
+    const updates = await tg('getUpdates', { offset: cursor ?? undefined, timeout: 2, allowed_updates: ['message'] }, { timeoutMs: 15000 });
+    const hit = pickPairing(fromUpdates(updates));
+    const next = updates.length ? updates[updates.length - 1].update_id + 1 : cursor;
+    return hit ? { chatId: hit.from, name: hit.name, cursor: next } : { cursor: next };
+  }
+};
+
+/* ============================================================== imessage */
+
+export const CHAT_DB = path.join(os.homedir(), 'Library', 'Messages', 'chat.db');
+const SEND_SCRIPT = path.join(SUNDUST_DIR, 'july-send.applescript');
+const APPLE_EPOCH_MS = 978307200000;
 
 /** Full Disk Access is what lets a process read chat.db; say so precisely. */
 export function dbAccess(db = CHAT_DB) {
@@ -64,17 +152,12 @@ function query(sql, db = CHAT_DB) {
   return out.trim() ? JSON.parse(out) : [];
 }
 
-/**
- * Recent Messages sometimes leave `text` empty and keep the string inside
- * `attributedBody`, an NSAttributedString archive. The text sits after the
- * NSString marker as a length-prefixed run; this pulls it out.
- */
+/** Newer Messages keep the text inside attributedBody; pull it out of the archive. */
 export function extractText(hexBody) {
   if (!hexBody) return null;
   const buf = Buffer.from(hexBody, 'hex');
   const i = buf.indexOf(Buffer.from('NSString'));
   if (i === -1) return null;
-  // after "NSString" comes a small header, then 0x2b, then a length, then the bytes
   let p = buf.indexOf(0x2b, i + 8);
   if (p === -1) return null;
   p += 1;
@@ -87,7 +170,6 @@ export function extractText(hexBody) {
 
 export const appleToMs = (d) => (d > 1e12 ? d / 1e6 : d * 1000) + APPLE_EPOCH_MS;
 
-/** Texts newer than `sinceRowId`, oldest first. `handle` limits to one chat. */
 export function readMessages({ sinceRowId = 0, handle = null, limit = 50, db = CHAT_DB } = {}) {
   const where = [`m.ROWID > ${Number(sinceRowId) || 0}`];
   if (handle) where.push(`c.chat_identifier = '${String(handle).replace(/'/g, "''")}'`);
@@ -100,15 +182,13 @@ export function readMessages({ sinceRowId = 0, handle = null, limit = 50, db = C
     WHERE ${where.join(' AND ')}
     ORDER BY m.ROWID ASC LIMIT ${Number(limit) || 50}`, db);
   return rows.map((r) => ({
-    rowid: r.rowid, chat: r.chat, fromMe: r.fromMe === 1,
+    id: r.rowid, rowid: r.rowid, chat: r.chat, from: r.chat, fromMe: r.fromMe === 1,
     at: appleToMs(Number(r.date)),
     text: (r.text && r.text.trim()) || extractText(r.body) || ''
   })).filter((r) => r.text);
 }
 
 export const latestRowId = (db = CHAT_DB) => Number(query('SELECT max(ROWID) AS m FROM message', db)[0]?.m || 0);
-
-/* -------------------------------------------------------------- sending */
 
 const SCRIPT = `on run argv
   set theHandle to item 1 of argv
@@ -121,7 +201,7 @@ const SCRIPT = `on run argv
 end run
 `;
 
-export function send(handle, text, { marker = DEFAULTS.marker } = {}) {
+export function sendIMessage(handle, text, { marker = '☀︎ ' } = {}) {
   fs.mkdirSync(SUNDUST_DIR, { recursive: true });
   if (!fs.existsSync(SEND_SCRIPT) || fs.readFileSync(SEND_SCRIPT, 'utf8') !== SCRIPT) fs.writeFileSync(SEND_SCRIPT, SCRIPT);
   const body = `${marker}${String(text).trim()}`.slice(0, 4000);
@@ -132,6 +212,35 @@ export function send(handle, text, { marker = DEFAULTS.marker } = {}) {
     });
   });
 }
+
+/** iMessage pairing: the newest "july" text in the last few minutes; its chat becomes the handle. */
+export function pairIMessage({ windowMs = 5 * 60000, db = CHAT_DB } = {}) {
+  const access = dbAccess(db);
+  if (!access.ok) throw new Error(access.why);
+  const since = latestRowId(db) - 200;
+  const hit = pickPairing(readMessages({ sinceRowId: Math.max(0, since), limit: 200, db }), { windowMs });
+  return hit ? hit.chat : null;
+}
+
+export const imessage = {
+  id: 'imessage', label: 'iMessage', marker: '☀︎ ', blocking: false,
+  ready(js) {
+    if (!js.handle) return { ok: false, why: 'July is not paired with a handle yet — run `sundust july pair`' };
+    const access = dbAccess();
+    return access.ok ? { ok: true } : { ok: false, why: access.why };
+  },
+  async receive(cursor, js) {
+    const since = cursor ?? latestRowId();
+    const messages = readMessages({ sinceRowId: since, handle: js.handle });
+    return { messages, cursor: messages.length ? messages[messages.length - 1].rowid : since };
+  },
+  isMine(m, js) { return m.chat === js.handle; },
+  send(text, js) { return sendIMessage(js.handle, text, { marker: imessage.marker }); },
+  async typing() {},
+  async pair() { const handle = pairIMessage(); return handle ? { handle } : null; }
+};
+
+export const channel = (js = julySettings()) => (js.channel === 'imessage' ? imessage : telegram);
 
 /* --------------------------------------------------------------- digest */
 
@@ -160,19 +269,13 @@ export function pendingItems(s) {
   return out;
 }
 
-/**
- * The compact picture July sees with every message, and a table that turns
- * the short ids in it back into real ones.
- */
+/** The compact picture July sees with every message, and a table from short ids back to real ones. */
 export function digest(s) {
   const ids = {};
   const reg = (kind, id) => { if (id) ids[`${kind}:${short(id)}`] = id; return short(id); };
   const L = [];
   L.push(`Now: ${new Date().toLocaleString()}`);
-  if (s.usage?.available) {
-    const parts = s.usage.constraints.map((c) => `${c.label} ${c.percent}%`);
-    L.push(`Plan usage: ${parts.join(' · ')}`);
-  }
+  if (s.usage?.available) L.push(`Plan usage: ${s.usage.constraints.map((c) => `${c.label} ${c.percent}%`).join(' · ')}`);
   L.push(`Fleet autonomy: ${s.settings?.autonomyEnabled === false ? 'PAUSED' : 'on'} · ${s.activeRuns || 0} runs in flight`);
 
   const pend = pendingItems(s);
@@ -201,7 +304,7 @@ export function digest(s) {
 
 export const SYSTEM = `You are July, the human's secretary for Sundust, a console that watches the projects they run with a coding agent (Claude Code) and runs work for them on a schedule.
 
-You are talking over text message. Keep replies short and plain: a sentence or a few lines, no markdown, no headings, no emoji. Say what you know from the digest; do not guess about things it does not contain. Ids in the digest look like q:1a2b3c4d, s:…, t:…, p:…, r:… — use them exactly.
+You are talking over chat messages. Keep replies short and plain: a sentence or a few lines, no markdown, no headings, no emoji. Say what you know from the digest; do not guess about things it does not contain. Ids in the digest look like q:1a2b3c4d, s:…, t:…, p:…, r:… — use them exactly.
 
 When the human wants something done, take the action by writing it on its own line at the END of your reply, exactly like this, one per line:
 ACTION {"type":"reply","session":"s:xxxxxxxx","question":"q:xxxxxxxx","message":"…"}   answer an open question or continue a session, headless, with that message (omit "question" when there is none)
@@ -214,7 +317,6 @@ Rules: only act when the human clearly asked for it; if it is ambiguous, ask one
 
 /* ---------------------------------------------------------------- brain */
 
-/** Pull ACTION lines out of a reply; return the clean text and the actions. */
 export function parseActions(text) {
   const actions = [], keep = [];
   for (const raw of String(text || '').split('\n')) {
@@ -235,7 +337,7 @@ export function think({ message, digestText, state, settings = julySettings() })
   const fresh = !sessionId || state.turns >= settings.maxTurns;
   if (fresh) sessionId = crypto.randomUUID();
 
-  const prompt = `${digestText}\n\n--- TEXT FROM THE HUMAN ---\n${message}`;
+  const prompt = `${digestText}\n\n--- MESSAGE FROM THE HUMAN ---\n${message}`;
   const args = ['-p', prompt, '--output-format', 'json', '--model', settings.model, '--tools', '',
     '--permission-mode', 'dontAsk', '--system-prompt', SYSTEM, fresh ? '--session-id' : '--resume', sessionId];
 
@@ -314,17 +416,8 @@ export function pingFor(it) {
   return `${it.project}: the run failed: ${it.text}\n\nSay "retry" to run it again.`;
 }
 
-/**
- * What has to be true before July can work. Under launchd, a missing piece is
- * waited for rather than exited on, so granting it later needs no restart.
- */
-export function ready() {
-  const settings = julySettings();
-  if (!settings.handle) return { ok: false, why: 'July is not paired with a handle yet — run `sundust july pair`' };
-  const access = dbAccess();
-  if (!access.ok) return { ok: false, why: access.why };
-  return { ok: true };
-}
+/** What has to be true before July can work on the configured channel. */
+export function ready(js = julySettings()) { return channel(js).ready(js); }
 
 /** Run July until stopped. `log` receives one line per event. */
 export async function run({ log = console.log, wait = Boolean(process.env.SUNDUST_JULY_SERVICE) } = {}) {
@@ -333,87 +426,89 @@ export async function run({ log = console.log, wait = Boolean(process.env.SUNDUS
   let said = null;
   while (!check.ok) {
     if (said !== check.why) { log(`waiting: ${check.why}`); said = check.why; }
-    await new Promise((r) => setTimeout(r, 30000));
+    await sleep(30000);
     check = ready();
   }
-  const settings = julySettings();
-  const port = getSettings().port;
 
+  const js = julySettings();
+  const ch = channel(js);
+  const port = getSettings().port;
   const st = loadState();
-  if (!st.lastRowId) st.lastRowId = latestRowId();
+  // a switch of channel means the cursor is in the other channel's units
+  if (st.channel !== ch.id) { st.cursor = null; st.channel = ch.id; }
   st.startedAt = Date.now();
   saveState(st);
-  log(`July is listening for texts from ${settings.handle} (model ${settings.model}); Sundust on :${port}`);
+  log(`July is listening on ${ch.label}${ch.id === 'telegram' ? ` for ${js.telegram?.name || js.telegram?.chatId}` : ` for ${js.handle}`} (model ${js.model}); Sundust on :${port}`);
 
-  let busy = false;
-  const handleTexts = async () => {
-    if (busy) return; busy = true;
-    try {
-      const msgs = readMessages({ sinceRowId: st.lastRowId, handle: settings.handle });
-      for (const m of msgs) {
-        st.lastRowId = Math.max(st.lastRowId, m.rowid);
-        if (m.text.startsWith(settings.marker.trim())) continue;        // July's own
-        if (m.at < st.startedAt - 120000) continue;                       // older than this run
-        log(`text: ${m.text.slice(0, 80)}`);
-        let s;
-        try { s = await stateApi(port); } catch (e) { await send(settings.handle, `Sundust is not running on the Mac (${e.message}).`, settings); continue; }
-        const d = digest(s);
-        let out;
-        try { out = await think({ message: m.text, digestText: d.text, state: st, settings }); }
-        catch (e) { log(`think failed: ${e.message}`); await send(settings.handle, `I could not think just now: ${e.message}`, settings); continue; }
-        st.sessionId = out.sessionId; st.turns = out.fresh ? 1 : st.turns + 1;
-        const results = [];
-        for (const a of out.actions.slice(0, 3)) {
-          try {
-            const r = await execute(a, { ids: d.ids, state: s, port });
-            results.push(r.text);
-            if (r.watch) st.watching[r.watch.runId] = { projectId: r.watch.projectId, at: Date.now() };
-          } catch (e) { results.push(`That did not work: ${e.message}`); }
-        }
-        const reply = [out.text, ...results].filter(Boolean).join('\n\n') || 'Done.';
-        await send(settings.handle, reply, settings);
-        log(`reply: ${reply.slice(0, 80)}${out.costUsd ? ` ($${out.costUsd.toFixed(3)})` : ''}`);
-      }
-      saveState(st);
-    } catch (e) { log(`texts: ${e.message}`); }
-    finally { busy = false; }
+  const answer = async (m) => {
+    log(`message: ${m.text.slice(0, 80)}`);
+    let s;
+    try { s = await stateApi(port); } catch (e) { await ch.send(`Sundust is not running on the Mac (${e.message}).`, js); return; }
+    await ch.typing(js);
+    const d = digest(s);
+    let out;
+    try { out = await think({ message: m.text, digestText: d.text, state: st, settings: js }); }
+    catch (e) { log(`think failed: ${e.message}`); await ch.send(`I could not think just now: ${e.message}`, js); return; }
+    st.sessionId = out.sessionId; st.turns = out.fresh ? 1 : st.turns + 1;
+    const results = [];
+    for (const a of out.actions.slice(0, 3)) {
+      try {
+        const r = await execute(a, { ids: d.ids, state: s, port });
+        results.push(r.text);
+        if (r.watch) st.watching[r.watch.runId] = { projectId: r.watch.projectId, at: Date.now() };
+      } catch (e) { results.push(`That did not work: ${e.message}`); }
+    }
+    const reply = [out.text, ...results].filter(Boolean).join('\n\n') || 'Done.';
+    await ch.send(reply, js);
+    log(`reply: ${reply.slice(0, 80)}${out.costUsd ? ` ($${out.costUsd.toFixed(3)})` : ''}`);
   };
 
-  const handleState = async () => {
+  const inbox = async () => {
+    for (;;) {
+      try {
+        const r = await ch.receive(st.cursor, js);
+        st.cursor = r.cursor;
+        for (const m of r.messages) {
+          if (!ch.isMine(m, js)) continue;                                   // someone else found the bot
+          if (ch.marker && m.text.startsWith(ch.marker.trim())) continue;     // July's own (iMessage)
+          if (m.at < st.startedAt - 120000) continue;                         // older than this run
+          await answer(m);
+        }
+        saveState(st);
+      } catch (e) { log(`inbox: ${e.message}`); await sleep(5000); }
+      if (!ch.blocking) await sleep(js.pollMs);
+    }
+  };
+
+  const watch = async () => {
     let s;
     try { s = await stateApi(port); } catch { return; }
-    // things that need you, once each
     for (const it of pendingItems(s)) {
       const key = `${it.kind}:${it.id}`;
       if (st.notified[key]) continue;
       st.notified[key] = Date.now();
-      try { await send(settings.handle, pingFor(it), settings); log(`ping: ${key}`); } catch (e) { log(`ping failed: ${e.message}`); }
+      try { await ch.send(pingFor(it), js); log(`ping: ${key}`); } catch (e) { log(`ping failed: ${e.message}`); }
     }
-    // runs July started, once they finish
     for (const [runId, w] of Object.entries(st.watching)) {
       const p = (s.projects || []).find((x) => x.id === w.projectId);
       const r = p && (p.runs || []).find((x) => x.runId === runId);
       if (!r || r.state === 'running') { if (Date.now() - w.at > 3600000) delete st.watching[runId]; continue; }
       delete st.watching[runId];
       const text = r.ok ? `${p.name} finished: ${line(r.summary || 'done', 400)}` : `${p.name} failed: ${line(r.error || 'unknown error', 300)}`;
-      try { await send(settings.handle, text, settings); log(`done: ${runId}`); } catch {}
+      try { await ch.send(text, js); log(`done: ${runId}`); } catch {}
     }
-    // forget old notifications so a question that comes back gets pinged again
     for (const [k, t] of Object.entries(st.notified)) if (Date.now() - t > 7 * 86400000) delete st.notified[k];
     saveState(st);
   };
 
-  await handleState();
-  setInterval(handleTexts, settings.pollMs);
-  setInterval(handleState, settings.stateMs);
-  await new Promise(() => {});
+  await watch();
+  setInterval(watch, js.stateMs);
+  await inbox();
 }
 
-/**
- * A contact card for July: the name, the address you will text, and the sun
- * as its photo, so the thread reads as July on every device. Opening the
- * .vcf in Contacts adds it.
- */
+/* -------------------------------------------------------------- contact */
+
+/** An iMessage contact card for July (used only on the iMessage channel). */
 export function contactCard({ address, photoBase64 = null }) {
   const isEmail = /@/.test(address);
   const lines = ['BEGIN:VCARD', 'VERSION:3.0', 'N:;July;;;', 'FN:July', 'ORG:Sundust', 'NOTE:Your Sundust secretary. Text this contact.'];
@@ -436,16 +531,6 @@ export async function renderPhoto() {
   try { return fs.readFileSync(png).toString('base64'); } catch { return null; } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-/**
- * Pairing: the human texts July (or themselves) the word "july"; the chat that
- * text arrives in becomes the handle. No guessing at addresses.
- */
-export function pair({ windowMs = 5 * 60000, db = CHAT_DB } = {}) {
-  const access = dbAccess(db);
-  if (!access.ok) throw new Error(access.why);
-  const since = latestRowId(db) - 200;
-  const recent = readMessages({ sinceRowId: Math.max(0, since), limit: 200, db })
-    .filter((m) => /^\s*july\s*$/i.test(m.text) && Date.now() - m.at < windowMs)
-    .sort((a, b) => b.rowid - a.rowid);
-  return recent.length ? recent[0].chat : null;
-}
+// kept for older callers
+export const send = sendIMessage;
+export const pair = pairIMessage;
