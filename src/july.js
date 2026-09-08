@@ -27,6 +27,7 @@ import { envFor, getToken } from './credentials.js';
 import { getHarness } from './harnesses.js';
 
 const STATE = path.join(SUNDUST_DIR, 'july.json');
+const LOCK = path.join(SUNDUST_DIR, 'july.lock');
 const WORKDIR = path.join(SUNDUST_DIR, 'july');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -41,6 +42,22 @@ export const DEFAULTS = {
 };
 
 export const julySettings = () => ({ ...DEFAULTS, ...(getSettings().july || {}) });
+
+/* One July at a time. Telegram allows a single poller per bot, and two copies
+   of July answering the same chat would be worse than none. */
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+export function whoHoldsLock() {
+  try { const pid = Number(fs.readFileSync(LOCK, 'utf8').trim()); return pid && alive(pid) ? pid : null; } catch { return null; }
+}
+export function lock() {
+  const other = whoHoldsLock();
+  if (other && other !== process.pid) return { ok: false, pid: other };
+  fs.mkdirSync(SUNDUST_DIR, { recursive: true });
+  fs.writeFileSync(LOCK, String(process.pid));
+  const release = () => { try { if (Number(fs.readFileSync(LOCK, 'utf8')) === process.pid) fs.unlinkSync(LOCK); } catch {} };
+  for (const sig of ['exit', 'SIGINT', 'SIGTERM']) process.once(sig, () => { release(); if (sig !== 'exit') process.exit(0); });
+  return { ok: true, release };
+}
 
 export function loadState() {
   return readJSON(STATE, { sessionId: null, turns: 0, cursor: null, notified: {}, watching: {}, startedAt: 0 });
@@ -421,6 +438,8 @@ export function ready(js = julySettings()) { return channel(js).ready(js); }
 
 /** Run July until stopped. `log` receives one line per event. */
 export async function run({ log = console.log, wait = Boolean(process.env.SUNDUST_JULY_SERVICE) } = {}) {
+  const held = lock();
+  if (!held.ok) throw new Error(`July is already running (pid ${held.pid}). Watch it with \`sundust july logs\`, or stop it first.`);
   let check = ready();
   if (!check.ok && !wait) throw new Error(check.why);
   let said = null;
@@ -463,6 +482,7 @@ export async function run({ log = console.log, wait = Boolean(process.env.SUNDUS
     log(`reply: ${reply.slice(0, 80)}${out.costUsd ? ` ($${out.costUsd.toFixed(3)})` : ''}`);
   };
 
+  let lastInboxError = '', lastInboxErrorAt = 0;
   const inbox = async () => {
     for (;;) {
       try {
@@ -475,7 +495,15 @@ export async function run({ log = console.log, wait = Boolean(process.env.SUNDUS
           await answer(m);
         }
         saveState(st);
-      } catch (e) { log(`inbox: ${e.message}`); await sleep(5000); }
+      } catch (e) {
+        const conflict = /Conflict/i.test(e.message);
+        // say it once a minute, not every cycle; a conflict means another July is polling
+        if (e.message !== lastInboxError || Date.now() - lastInboxErrorAt > 60000) {
+          log(`inbox: ${e.message}${conflict ? ' — another July is running; stop one of them' : ''}`);
+          lastInboxError = e.message; lastInboxErrorAt = Date.now();
+        }
+        await sleep(conflict ? 15000 : 5000);
+      }
       if (!ch.blocking) await sleep(js.pollMs);
     }
   };

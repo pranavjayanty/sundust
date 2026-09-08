@@ -389,6 +389,12 @@ switch (cmd) {
     }
     if (sub === 'model' && args[2]) { saveJuly({ model: args[2] }); console.log(`  ${C.g('✓')} July uses ${args[2]}`); break; }
     if (sub === 'run' || sub === 'up') {
+      // the login service and a terminal copy would fight over the bot
+      const ag = service.julyStatus();
+      if (ag.running && !process.env.SUNDUST_JULY_SERVICE && !has('force')) {
+        console.log(`\n  July is already running as a login service ${C.dim(`(pid ${ag.pid})`)}.\n  Watch it:  ${C.b('sundust july logs')}\n  Run by hand instead:  ${C.b('sundust july uninstall')}, then ${C.b('sundust july')}\n`);
+        break;
+      }
       try { await july.run({ log: (l) => console.log(C.dim(`[${new Date().toLocaleTimeString()}]`), l) }); }
       catch (e) { console.error(`\n  ${C.r('!')} ${e.message}\n`); process.exit(1); }
       break;

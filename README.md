@@ -160,7 +160,7 @@ sundust july status
 sundust july uninstall
 ```
 
-The bot talks to Telegram by long polling, so nothing is exposed on your network and no public URL is needed. `sundust july model sonnet` if Haiku is not enough.
+The bot talks to Telegram by long polling, so nothing is exposed on your network and no public URL is needed. Only one July may run at a time (Telegram allows one poller per bot): `sundust july` refuses to start while the login service is running, and a pid lock stops two terminal copies. `sundust july model sonnet` if Haiku is not enough.
 
 **iMessage instead of Telegram.** `sundust july channel imessage` switches July to your own Messages account: it reads the Messages database (Full Disk Access required for the terminal, and for the node binary under launchd) and sends through Messages. Pair by texting the word `july` to yourself or to a contact card made with `sundust july contact <address>`. The limitation is structural: a Mac can only send from the account it is signed into, so July's texts appear as sent by you and do not notify you. It works for asking questions; Telegram is the better fit for pings.
 

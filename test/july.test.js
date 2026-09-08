@@ -175,3 +175,19 @@ test('the contact card names July, carries the address, and embeds a photo when 
   assert.match(phone, /TEL;[^\r\n]*:\+15550001111/);
   assert.doesNotMatch(phone, /PHOTO/);
 });
+
+test('only one July can hold the lock, and a dead holder does not block', () => {
+  const lockFile = path.join(home, 'july.lock');
+  fs.writeFileSync(lockFile, '999999');                 // no such process
+  assert.equal(july.whoHoldsLock(), null, 'a stale pid is ignored');
+  const first = july.lock();
+  assert.equal(first.ok, true);
+  assert.equal(july.whoHoldsLock(), process.pid);
+  const second = july.lock();
+  assert.equal(second.ok, true, 'the same process may re-lock');
+  fs.writeFileSync(lockFile, String(process.ppid));   // a live process that is not us
+  const third = july.lock();
+  assert.equal(third.ok, false);
+  assert.equal(third.pid, process.ppid);
+  first.release();
+});
