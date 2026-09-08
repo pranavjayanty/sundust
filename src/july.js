@@ -410,8 +410,35 @@ export async function run({ log = console.log, wait = Boolean(process.env.SUNDUS
 }
 
 /**
- * Pairing: the human texts themselves the word "july"; the chat that text
- * arrives in becomes the handle. No guessing at phone numbers.
+ * A contact card for July: the name, the address you will text, and the sun
+ * as its photo, so the thread reads as July on every device. Opening the
+ * .vcf in Contacts adds it.
+ */
+export function contactCard({ address, photoBase64 = null }) {
+  const isEmail = /@/.test(address);
+  const lines = ['BEGIN:VCARD', 'VERSION:3.0', 'N:;July;;;', 'FN:July', 'ORG:Sundust', 'NOTE:Your Sundust secretary. Text this contact.'];
+  lines.push(isEmail ? `EMAIL;type=INTERNET;type=HOME;type=pref:${address}` : `TEL;type=CELL;type=pref:${address}`);
+  if (photoBase64) lines.push(`PHOTO;ENCODING=b;TYPE=PNG:${photoBase64}`);
+  lines.push('END:VCARD');
+  return lines.join('\r\n') + '\r\n';
+}
+
+/** The sun from web/icon.svg as a 256px PNG, base64, via headless Chrome; null without Chrome. */
+export async function renderPhoto() {
+  const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  if (!fs.existsSync(chrome)) return null;
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const svg = fs.readFileSync(path.join(root, 'web', 'icon.svg'), 'utf8');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'july-photo-'));
+  const html = path.join(dir, 'icon.html'), png = path.join(dir, 'icon.png');
+  fs.writeFileSync(html, `<!doctype html><body style="margin:0;background:#09090b">${svg.replace('<svg ', '<svg width="256" height="256" ')}</body>`);
+  await new Promise((resolve) => execFile(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--window-size=256,256', '--timeout=8000', `--screenshot=${png}`, `file://${html}`], { timeout: 20000 }, () => resolve()));
+  try { return fs.readFileSync(png).toString('base64'); } catch { return null; } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+/**
+ * Pairing: the human texts July (or themselves) the word "july"; the chat that
+ * text arrives in becomes the handle. No guessing at addresses.
  */
 export function pair({ windowMs = 5 * 60000, db = CHAT_DB } = {}) {
   const access = dbAccess(db);

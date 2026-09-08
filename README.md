@@ -136,10 +136,18 @@ What July can do:
 
 July runs on a cheap model (Haiku by default) through the Claude Code CLI, so it costs plan usage and needs no API key. It keeps one conversation going so it remembers context, and starts a fresh one after 40 exchanges.
 
+**Give July a name in Messages.** July answers from one of your own iMessage addresses, so the thread can be with a contact called July rather than with yourself. Any address your account can receive at works: your Apple ID email, or a dedicated iCloud alias (iCloud settings, Mail, Add alias; then on the iPhone, Settings, Messages, Send & Receive, turn it on). Then:
+
+```bash
+sundust july contact july.you@icloud.com     # writes a contact card with the sun as its photo and opens it in Contacts
+```
+
+Add the card. If that address is also on your own "Me" card in Contacts, remove it there, or the thread will keep your name. Texting July is still texting your own account, so nothing leaves your devices.
+
 Setup, on the Mac:
 
 1. Grant Full Disk Access to the app you run Sundust from (System Settings, Privacy & Security, Full Disk Access, add Terminal or iTerm). July reads the Messages database and macOS does not allow that otherwise.
-2. Pair. Run `sundust july pair`, then text yourself the word `july` from your phone. The chat that text arrives in becomes July's handle.
+2. Pair. Run `sundust july pair`, then text July (or yourself) the word `july` from your phone. The chat that text arrives in becomes July's handle.
 3. `sundust july test` sends a hello. macOS asks once to allow Sundust to control Messages.
 4. `sundust july` starts listening. It needs `sundust up` running.
 
@@ -230,7 +238,7 @@ Set `SUNDUST_HOME` to use a different directory.
 | `sundust run <match> [prompt]` | Run an agenda task, or a prompt, headless now |
 | `sundust auth` | Store a long-lived token |
 | `sundust remote setup` / `add` / `remove` | Reach the console from other devices |
-| `sundust july` / `pair` / `test` / `install` / `logs` / `status` / `model` | The secretary you text |
+| `sundust july` / `contact` / `pair` / `test` / `install` / `logs` / `status` / `model` | The secretary you text |
 
 Templates: `blank`, `finance`, `recipes`, `fitness`, `journal`. Each one scaffolds a folder, a `CLAUDE.md` brief, and an agenda that starts running on its own.
 

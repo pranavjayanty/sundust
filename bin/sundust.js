@@ -3,7 +3,7 @@ import { exec } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import { createServer, buildState } from '../src/server.js';
-import { ensureDirs, getSettings, saveSettings } from '../src/config.js';
+import { ensureDirs, getSettings, saveSettings, SUNDUST_DIR } from '../src/config.js';
 import { loadProjects, scaffold, adopt, relocate } from '../src/projects.js';
 import { tick, runTask, describeCron } from '../src/autonomy.js';
 import { TEMPLATES } from '../src/templates.js';
@@ -296,10 +296,20 @@ switch (cmd) {
   case 'july': {
     const sub = args[1] || 'run';
     const js = july.julySettings();
+    if (sub === 'contact') {
+      const address = (args[2] || '').trim();
+      if (!address) { console.error('  usage: sundust july contact <email-or-number>   (an iMessage address of yours that July will answer from)'); process.exit(1); }
+      const photo = await july.renderPhoto().catch(() => null);
+      const file = path.join(SUNDUST_DIR, 'July.vcf');
+      fs.writeFileSync(file, july.contactCard({ address, photoBase64: photo }));
+      exec(`open "${file}"`);
+      console.log(`\n  ${C.g('✓')} contact card written to ${file} and opened in Contacts — add it${photo ? '' : C.dim(' (no photo: Chrome not found to draw it)')}.\n  Then text ${C.b('July')} the word ${C.b('july')} and run ${C.b('sundust july pair')}.\n`);
+      break;
+    }
     if (sub === 'pair') {
       const access = july.dbAccess();
       if (!access.ok) { console.error(`\n  ${C.r('!')} ${access.why}\n`); process.exit(1); }
-      console.log(`\n  Text yourself the single word ${C.b('july')} from your phone (or Messages on this Mac), then press Enter.\n  ${C.dim('The chat that text arrives in becomes July\'s handle.')}`);
+      console.log(`\n  Text ${C.b('July')} (the contact) — or yourself — the single word ${C.b('july')} from your phone, then press Enter.\n  ${C.dim('The chat that text arrives in becomes July\'s handle.')}`);
       await new Promise((r) => process.stdin.once('data', r));
       const handle = july.pair();
       if (!handle) { console.error(C.r('  no "july" text in the last five minutes — send it and try again')); process.exit(1); }
@@ -348,7 +358,8 @@ switch (cmd) {
       catch (e) { console.error(`\n  ${C.r('!')} ${e.message}\n`); process.exit(1); }
       break;
     }
-    console.log(`  sundust july            listen and act (needs \`sundust up\` running)\n  sundust july pair       text yourself "july" to set the handle\n  sundust july test       send a hello\n  sundust july install    run at login, restart if it stops (needs Full Disk Access for node)\n  sundust july uninstall\n  sundust july logs [--n 80]\n  sundust july status\n  sundust july model <m>  e.g. haiku, sonnet`);
+    console.log(`  sundust july            listen and act (needs \`sundust up\` running)\n  sundust july contact <address>  make a "July" contact card for one of your iMessage addresses
+  sundust july pair       text July (or yourself) "july" to set the handle\n  sundust july test       send a hello\n  sundust july install    run at login, restart if it stops (needs Full Disk Access for node)\n  sundust july uninstall\n  sundust july logs [--n 80]\n  sundust july status\n  sundust july model <m>  e.g. haiku, sonnet`);
     break;
   }
 

@@ -131,3 +131,14 @@ test('database access reports the missing-permission case in words', () => {
   assert.match(r.why, /no Messages database/);
   fs.rmSync(path.join(home, 'chat.db'), { force: true });
 });
+
+test('the contact card names July, carries the address, and embeds a photo when given one', () => {
+  const email = july.contactCard({ address: 'july.me@icloud.com', photoBase64: 'AAAA' });
+  assert.match(email, /^BEGIN:VCARD\r\n/);
+  assert.match(email, /\r\nFN:July\r\n/);
+  assert.match(email, /EMAIL;[^\r\n]*:july\.me@icloud\.com/);
+  assert.match(email, /PHOTO;ENCODING=b;TYPE=PNG:AAAA/);
+  const phone = july.contactCard({ address: '+15550001111' });
+  assert.match(phone, /TEL;[^\r\n]*:\+15550001111/);
+  assert.doesNotMatch(phone, /PHOTO/);
+});
