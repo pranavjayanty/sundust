@@ -314,8 +314,29 @@ switch (cmd) {
       break;
     }
     if (sub === 'status') {
-      const st = july.loadState(); const access = july.dbAccess();
-      console.log(`  handle    ${js.handle || C.dim('not paired')}\n  model     ${js.model}\n  messages  ${access.ok ? C.g('readable') : C.r(access.why)}\n  memory    ${st.sessionId ? `${st.turns} turns in the current conversation` : 'none yet'}\n  watching  ${Object.keys(st.watching || {}).length} runs · notified ${Object.keys(st.notified || {}).length}`);
+      const st = july.loadState(); const access = july.dbAccess(); const ag = service.julyStatus();
+      const svc = !ag.supported ? C.dim('n/a') : ag.installed ? (ag.running ? C.g(`running (pid ${ag.pid})`) : C.y('installed, not running')) : C.dim('not installed — sundust july install');
+      console.log(`  handle    ${js.handle || C.dim('not paired')}\n  model     ${js.model}\n  messages  ${access.ok ? C.g('readable') : C.r(access.why)}\n  service   ${svc}\n  memory    ${st.sessionId ? `${st.turns} turns in the current conversation` : 'none yet'}\n  watching  ${Object.keys(st.watching || {}).length} runs · notified ${Object.keys(st.notified || {}).length}`);
+      break;
+    }
+    if (sub === 'install') {
+      try {
+        const { plist, log } = service.installJuly();
+        const node = service.nodeBinary();
+        console.log(`\n  ${C.g('✓')} July now starts at login and restarts if it stops.`);
+        console.log(C.dim(`    agent   ${plist}\n    log     ${log}\n`));
+        console.log(`  Under launchd, July runs as ${C.b(node)}.\n  Give ${C.b('that file')} Full Disk Access: System Settings → Privacy & Security → Full Disk Access → “+”,\n  press ${C.b('⌘⇧G')} in the file dialog and paste the path above. Until then July waits and says so in its log.\n`);
+      } catch (e) { console.error(C.r(`  ${e.message}`)); process.exit(1); }
+      break;
+    }
+    if (sub === 'uninstall') {
+      const { removed } = service.uninstallJuly();
+      console.log(removed ? `  ${C.g('✓')} July's login service removed` : C.dim('  July was not installed as a service'));
+      break;
+    }
+    if (sub === 'logs') {
+      const out = service.tailLog(Number(flag('n', 80)), service.JULY_LOG);
+      console.log(out || C.dim(`  no log yet at ${service.JULY_LOG}`));
       break;
     }
     if (sub === 'model' && args[2]) {
@@ -327,7 +348,7 @@ switch (cmd) {
       catch (e) { console.error(`\n  ${C.r('!')} ${e.message}\n`); process.exit(1); }
       break;
     }
-    console.log(`  sundust july            listen and act (needs \`sundust up\` running)\n  sundust july pair       text yourself "july" to set the handle\n  sundust july test       send a hello\n  sundust july status\n  sundust july model <m>  e.g. haiku, sonnet`);
+    console.log(`  sundust july            listen and act (needs \`sundust up\` running)\n  sundust july pair       text yourself "july" to set the handle\n  sundust july test       send a hello\n  sundust july install    run at login, restart if it stops (needs Full Disk Access for node)\n  sundust july uninstall\n  sundust july logs [--n 80]\n  sundust july status\n  sundust july model <m>  e.g. haiku, sonnet`);
     break;
   }
 
@@ -373,7 +394,7 @@ switch (cmd) {
     ${C.b('install')}            run at login and restart if it dies (launchd)
                        ${C.dim('--port N · then `sundust service` and `sundust logs`')}
     ${C.b('uninstall')}          remove the login service
-    ${C.b('july')}               the secretary you text: pair · test · status · model
+    ${C.b('july')}               the secretary you text: pair · test · install · status · model
     ${C.b('remote')} setup       serve over your tailnet and allow its name (needs Tailscale)
     ${C.b('remote')} add <host>  let a tailnet or tunnel hostname reach the console
 

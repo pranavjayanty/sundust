@@ -151,6 +151,16 @@ sundust july status
 sundust july model sonnet   # if Haiku is not enough
 ```
 
+To keep July running after you close the terminal:
+
+```bash
+sundust july install        # launchd agent: starts at login, restarts if it stops
+sundust july logs
+sundust july uninstall
+```
+
+Under launchd, July runs as the node binary rather than your terminal, so that binary needs Full Disk Access too. `sundust july install` prints the exact path; in the Full Disk Access file dialog press ⌘⇧G and paste it. Until it is granted, or until you pair, the service waits and says why in its log instead of failing.
+
 Only texts from the paired handle are read, and only ones sent after July started. July's own texts begin with ☀︎ so it never replies to itself.
 
 ## From your phone
@@ -199,7 +209,7 @@ State lives in `~/.sundust`. Nothing in `~/.claude` is ever written to.
 | `asks.json` | Open and answered questions |
 | `events.jsonl` | Cross-project events |
 | `credentials.json` | The long-lived token from `sundust auth`, mode 600 |
-| `log/` | Output of the login service |
+| `log/` | Output of the login services (`sundust.log`, `july.log`) |
 
 Set `SUNDUST_HOME` to use a different directory.
 
@@ -220,7 +230,7 @@ Set `SUNDUST_HOME` to use a different directory.
 | `sundust run <match> [prompt]` | Run an agenda task, or a prompt, headless now |
 | `sundust auth` | Store a long-lived token |
 | `sundust remote setup` / `add` / `remove` | Reach the console from other devices |
-| `sundust july` / `pair` / `test` / `status` / `model` | The secretary you text |
+| `sundust july` / `pair` / `test` / `install` / `logs` / `status` / `model` | The secretary you text |
 
 Templates: `blank`, `finance`, `recipes`, `fitness`, `journal`. Each one scaffolds a folder, a `CLAUDE.md` brief, and an agenda that starts running on its own.
 

@@ -14,22 +14,27 @@ import { fileURLToPath } from 'node:url';
 import { SUNDUST_DIR } from './config.js';
 
 export const LABEL = 'com.sundust.agent';
+export const JULY_LABEL = 'com.sundust.july';
 export const LOG_DIR = path.join(SUNDUST_DIR, 'log');
 export const LOG_FILE = path.join(LOG_DIR, 'sundust.log');
+export const JULY_LOG = path.join(LOG_DIR, 'july.log');
 
-const plistPath = () => path.join(os.homedir(), 'Library', 'LaunchAgents', `${LABEL}.plist`);
+const plistPathFor = (label) => path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
+const plistPath = () => plistPathFor(LABEL);
 const repoRoot = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const domain = () => `gui/${process.getuid()}`;
+/** The real node binary: this is what needs Full Disk Access for July under launchd. */
+export const nodeBinary = () => { try { return fs.realpathSync(process.execPath); } catch { return process.execPath; } };
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function plist({ args, cwd, log, env }) {
+function plist({ label = LABEL, args, cwd, log, env }) {
   const strings = (xs) => xs.map((x) => `      <string>${esc(x)}</string>`).join('\n');
   const dict = (o) => Object.entries(o).map(([k, v]) => `      <key>${esc(k)}</key>\n      <string>${esc(v)}</string>`).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>${LABEL}</string>
+  <key>Label</key><string>${label}</string>
   <key>ProgramArguments</key>
   <array>
 ${strings(args)}
@@ -51,45 +56,59 @@ ${dict(env)}
 
 export function supported() { return process.platform === 'darwin'; }
 
-/** Register and start the agent. Re-running replaces the previous one. */
-export function install({ port } = {}) {
-  if (!supported()) throw new Error('login service install is macOS (launchd) only for now; on Linux run `sundust up` under a systemd user unit');
+/** Register and start a launchd agent. Re-running replaces the previous one. */
+function installAgent({ label, command, log, extraEnv = {} }) {
+  if (!supported()) throw new Error('login service install is macOS (launchd) only for now; on Linux use a systemd user unit');
   fs.mkdirSync(LOG_DIR, { recursive: true });
-  fs.mkdirSync(path.dirname(plistPath()), { recursive: true });
-
-  const args = [process.execPath, path.join(repoRoot(), 'bin', 'sundust.js'), 'up', '--no-open'];
-  if (port) args.push('--port', String(port));
-
+  const file = plistPathFor(label);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const args = [nodeBinary(), path.join(repoRoot(), 'bin', 'sundust.js'), ...command];
   // launchd starts with a bare PATH, and the harness binary is rarely on it
-  const env = { PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin', HOME: os.homedir(), SUNDUST_HOME: SUNDUST_DIR };
-  fs.writeFileSync(plistPath(), plist({ args, cwd: repoRoot(), log: LOG_FILE, env }));
-
-  try { execFileSync('launchctl', ['bootout', domain(), plistPath()], { stdio: 'ignore' }); } catch {}
-  execFileSync('launchctl', ['bootstrap', domain(), plistPath()], { stdio: 'pipe' });
-  return { plist: plistPath(), log: LOG_FILE };
+  const env = { PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin', HOME: os.homedir(), SUNDUST_HOME: SUNDUST_DIR, ...extraEnv };
+  fs.writeFileSync(file, plist({ label, args, cwd: repoRoot(), log, env }));
+  try { execFileSync('launchctl', ['bootout', domain(), file], { stdio: 'ignore' }); } catch {}
+  execFileSync('launchctl', ['bootstrap', domain(), file], { stdio: 'pipe' });
+  return { plist: file, log };
 }
 
-export function uninstall() {
+function uninstallAgent(label) {
   if (!supported()) return { removed: false };
+  const file = plistPathFor(label);
   let removed = false;
-  try { execFileSync('launchctl', ['bootout', domain(), plistPath()], { stdio: 'ignore' }); } catch {}
-  if (fs.existsSync(plistPath())) { fs.unlinkSync(plistPath()); removed = true; }
-  return { removed, plist: plistPath() };
+  try { execFileSync('launchctl', ['bootout', domain(), file], { stdio: 'ignore' }); } catch {}
+  if (fs.existsSync(file)) { fs.unlinkSync(file); removed = true; }
+  return { removed, plist: file };
 }
 
-/** Is the agent registered, and is it running right now? */
-export function status() {
-  const installed = supported() && fs.existsSync(plistPath());
+/** Is an agent registered, and is it running right now? */
+function agentStatus(label, log) {
+  const file = plistPathFor(label);
+  const installed = supported() && fs.existsSync(file);
   let running = false, pid = null;
   if (installed) {
     try {
-      const out = execFileSync('launchctl', ['print', `${domain()}/${LABEL}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      const out = execFileSync('launchctl', ['print', `${domain()}/${label}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       const m = out.match(/\bpid = (\d+)/);
       if (m) { running = true; pid = Number(m[1]); }
     } catch {}
   }
-  return { supported: supported(), installed, running, pid, plist: plistPath(), log: LOG_FILE };
+  return { supported: supported(), installed, running, pid, plist: file, log };
 }
+
+// the console + scheduler
+export function install({ port } = {}) {
+  const command = ['up', '--no-open'];
+  if (port) command.push('--port', String(port));
+  return installAgent({ label: LABEL, command, log: LOG_FILE });
+}
+export const uninstall = () => uninstallAgent(LABEL);
+export const status = () => agentStatus(LABEL, LOG_FILE);
+
+// July, the secretary. It reads the Messages database, so the node binary
+// launchd runs needs Full Disk Access — the install output names it.
+export const installJuly = () => installAgent({ label: JULY_LABEL, command: ['july'], log: JULY_LOG, extraEnv: { SUNDUST_JULY_SERVICE: '1' } });
+export const uninstallJuly = () => uninstallAgent(JULY_LABEL);
+export const julyStatus = () => agentStatus(JULY_LABEL, JULY_LOG);
 
 let statusCache = { at: 0, value: null };
 /** status(), but at most once every 30 seconds — the console asks on every build. */
@@ -99,10 +118,10 @@ export function cachedStatus() {
   return statusCache.value;
 }
 
-/** The last `n` lines of the service log. */
-export function tailLog(n = 80) {
+/** The last `n` lines of a service log. */
+export function tailLog(n = 80, file = LOG_FILE) {
   try {
-    const lines = fs.readFileSync(LOG_FILE, 'utf8').split('\n');
+    const lines = fs.readFileSync(file, 'utf8').split('\n');
     return lines.slice(Math.max(0, lines.length - n - 1)).join('\n');
   } catch { return ''; }
 }

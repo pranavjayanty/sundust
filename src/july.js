@@ -314,13 +314,30 @@ export function pingFor(it) {
   return `${it.project}: the run failed: ${it.text}\n\nSay "retry" to run it again.`;
 }
 
+/**
+ * What has to be true before July can work. Under launchd, a missing piece is
+ * waited for rather than exited on, so granting it later needs no restart.
+ */
+export function ready() {
+  const settings = julySettings();
+  if (!settings.handle) return { ok: false, why: 'July is not paired with a handle yet — run `sundust july pair`' };
+  const access = dbAccess();
+  if (!access.ok) return { ok: false, why: access.why };
+  return { ok: true };
+}
+
 /** Run July until stopped. `log` receives one line per event. */
-export async function run({ log = console.log } = {}) {
+export async function run({ log = console.log, wait = Boolean(process.env.SUNDUST_JULY_SERVICE) } = {}) {
+  let check = ready();
+  if (!check.ok && !wait) throw new Error(check.why);
+  let said = null;
+  while (!check.ok) {
+    if (said !== check.why) { log(`waiting: ${check.why}`); said = check.why; }
+    await new Promise((r) => setTimeout(r, 30000));
+    check = ready();
+  }
   const settings = julySettings();
   const port = getSettings().port;
-  if (!settings.handle) throw new Error('July is not paired with a handle yet — run `sundust july pair`');
-  const access = dbAccess();
-  if (!access.ok) throw new Error(access.why);
 
   const st = loadState();
   if (!st.lastRowId) st.lastRowId = latestRowId();
